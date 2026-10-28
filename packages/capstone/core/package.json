@@ -1,6 +1,6 @@
 {
   "name": "bun-capstone",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "TypeScript/FFI bindings for the Capstone disassembly engine with full OOP support",
   "main": "./dist/index.js",
   "exports": {
@@ -45,7 +45,8 @@
   "homepage": "https://github.com/w0ldan/exoproc#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/w0ldan/exoproc.git"
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/capstone/core"
   },
   "bugs": {
     "url": "https://github.com/w0ldan/exoproc/issues"

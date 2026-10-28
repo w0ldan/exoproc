@@ -1,6 +1,6 @@
 {
   "name": "njava-agent",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Universal dynamic in-process Java instrumentation agent and headless reflection bridge builder.",
   "main": "./dist/index.js",
   "exports": {
@@ -58,5 +58,13 @@
   },
   "devDependencies": {
     "typescript": "^5.8.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/java/agent"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
   }
 }

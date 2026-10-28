@@ -1,6 +1,6 @@
 {
   "name": "exoproc-jjit",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "On-the-fly typed Java source synthesis, AST builder, ECJ compiler, and remapper for the Exoproc ecosystem.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -63,5 +63,14 @@
   },
   "devDependencies": {
     "typescript": "^5.8.2"
+  },
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/java/jjit"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
   }
 }

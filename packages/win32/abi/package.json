@@ -1,6 +1,6 @@
 {
   "name": "win32-abi",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Runtime-neutral Win32 x64 DLL and function ABI manifests.",
   "type": "module",
   "main": "./dist/index.js",
@@ -33,5 +33,14 @@
     "abi",
     "ffi",
     "dll"
-  ]
+  ],
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/win32/abi"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  }
 }

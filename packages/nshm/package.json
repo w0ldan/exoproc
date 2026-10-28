@@ -1,6 +1,6 @@
 {
   "name": "bun-nshm",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Cross-process shared memory for Bun via a dummy-process handle relay — the caller never OpenProcess's the target directly.",
   "main": "./dist/index.js",
   "exports": {
@@ -40,7 +40,8 @@
   "homepage": "https://github.com/w0ldan/exoproc#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/w0ldan/exoproc.git"
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/nshm"
   },
   "bugs": {
     "url": "https://github.com/w0ldan/exoproc/issues"

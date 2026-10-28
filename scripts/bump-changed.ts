@@ -218,6 +218,7 @@ export async function main() {
       file.includes('/dist/') ||
       file.startsWith('.changeset/') ||
       base === 'package.json' ||
+      base === 'package-lock.json' ||
       base === 'bun.lock' ||
       base === 'CHANGELOG.md' ||
       base === 'LICENSE' ||

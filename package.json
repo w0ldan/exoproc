@@ -1,6 +1,6 @@
 {
   "name": "exoproc-monorepo",
-  "version": "0.6.10",
+  "version": "0.6.11",
   "private": true,
   "description": "TypeScript toolkit for Windows x64 native systems programming, memory manipulation, and process instrumentation.",
   "type": "module",

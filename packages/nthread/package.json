@@ -1,6 +1,6 @@
 {
   "name": "bun-nthread",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "description": "Non-invasive x64 Windows thread redirection library for Bun — delegate execution to existing threads without machineCode, remote allocation, or CreateRemoteThread.",
   "main": "./dist/index.js",
   "exports": {
@@ -41,7 +41,8 @@
   "homepage": "https://github.com/w0ldan/exoproc#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/w0ldan/exoproc.git"
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/nthread"
   },
   "bugs": {
     "url": "https://github.com/w0ldan/exoproc/issues"
