@@ -63,7 +63,7 @@
     },
     "packages/accessors": {
       "name": "exoproc-accessors",
-      "version": "0.6.6",
+      "version": "0.6.7",
       "dependencies": {
         "bun-njava": "workspace:*",
         "bun-nshm": "workspace:*",
@@ -78,18 +78,18 @@
     },
     "packages/asm": {
       "name": "exoproc-asm",
-      "version": "0.6.4",
+      "version": "0.6.5",
     },
     "packages/capstone/abi": {
       "name": "bun-capstone-abi",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "dependencies": {
         "bun-xffi": "workspace:*",
       },
     },
     "packages/capstone/core": {
       "name": "bun-capstone",
-      "version": "0.6.5",
+      "version": "0.6.6",
       "dependencies": {
         "bun-capstone-abi": "workspace:*",
         "bun-xffi": "workspace:*",
@@ -98,14 +98,14 @@
     },
     "packages/dummy": {
       "name": "exoproc-dummy",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "dependencies": {
         "bun-xffi": "workspace:*",
       },
     },
     "packages/exoproc": {
       "name": "exoproc",
-      "version": "0.6.9",
+      "version": "0.6.10",
       "bin": {
         "exoproc": "dist/cli.js",
       },
@@ -128,7 +128,7 @@
     },
     "packages/exoproc-mcp": {
       "name": "exoproc-mcp",
-      "version": "0.6.6",
+      "version": "0.6.7",
       "bin": {
         "exoproc-mcp": "dist/index.js",
       },
@@ -148,7 +148,7 @@
     },
     "packages/java/agent": {
       "name": "njava-agent",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "dependencies": {
         "exoproc-jjit": "workspace:*",
         "exoproc-utils": "workspace:*",
@@ -159,7 +159,7 @@
     },
     "packages/java/jjit": {
       "name": "exoproc-jjit",
-      "version": "0.6.5",
+      "version": "0.6.6",
       "dependencies": {
         "exoproc-mappings": "workspace:*",
         "exoproc-utils": "workspace:*",
@@ -170,14 +170,14 @@
     },
     "packages/java/mappings": {
       "name": "exoproc-mappings",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "devDependencies": {
         "typescript": "^5.8.2",
       },
     },
     "packages/java/nashorn": {
       "name": "exoproc-nashorn",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "devDependencies": {
         "exoproc-mappings": "workspace:*",
         "typescript": "^5.8.2",
@@ -185,7 +185,7 @@
     },
     "packages/java/njava": {
       "name": "bun-njava",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "dependencies": {
         "bun-winapi": "workspace:*",
         "bun-xffi": "workspace:*",
@@ -197,7 +197,7 @@
     },
     "packages/java/runtime": {
       "name": "exoproc-runtime",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "dependencies": {
         "exoproc-jjit": "workspace:*",
         "exoproc-mappings": "workspace:*",
@@ -210,7 +210,7 @@
     },
     "packages/minecraft": {
       "name": "exoproc-minecraft",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "dependencies": {
         "bun-njava": "workspace:*",
         "bun-xffi": "workspace:*",
@@ -224,7 +224,7 @@
     },
     "packages/minhook": {
       "name": "bun-minhook",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "dependencies": {
         "bun-capstone": "workspace:*",
         "bun-winapi": "workspace:*",
@@ -234,7 +234,7 @@
     },
     "packages/nshm": {
       "name": "bun-nshm",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "dependencies": {
         "bun-xffi": "workspace:*",
         "exoproc-dummy": "workspace:*",
@@ -243,7 +243,7 @@
     },
     "packages/nthread": {
       "name": "bun-nthread",
-      "version": "0.6.6",
+      "version": "0.6.7",
       "dependencies": {
         "bun-winapi": "workspace:*",
         "bun-xffi": "workspace:*",
@@ -252,7 +252,7 @@
     },
     "packages/runner": {
       "name": "exoproc-runner",
-      "version": "0.6.5",
+      "version": "0.6.6",
       "dependencies": {
         "bun-winapi": "workspace:*",
         "bun-xffi": "workspace:*",
@@ -262,7 +262,7 @@
     },
     "packages/simulate": {
       "name": "win32-simulate",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "dependencies": {
         "bun-capstone-abi": "workspace:*",
         "exoproc-asm": "workspace:*",
@@ -277,7 +277,7 @@
     },
     "packages/utils": {
       "name": "exoproc-utils",
-      "version": "0.6.6",
+      "version": "0.6.7",
       "bin": {
         "exoproc-deps": "dist/cli.js",
       },
@@ -294,14 +294,14 @@
     },
     "packages/win32/abi": {
       "name": "win32-abi",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "devDependencies": {
         "@types/bun": "latest",
       },
     },
     "packages/win32/api": {
       "name": "bun-winapi",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "dependencies": {
         "bun-xffi": "workspace:*",
         "exoproc-utils": "workspace:*",
@@ -309,7 +309,7 @@
     },
     "packages/xffi": {
       "name": "bun-xffi",
-      "version": "0.6.5",
+      "version": "0.6.6",
       "dependencies": {
         "exoproc-utils": "workspace:*",
         "win32-abi": "workspace:*",

@@ -8,13 +8,13 @@
     "url": "https://github.com/w0ldan/exoproc",
     "source": "github"
   },
-  "version": "0.6.10",
+  "version": "0.6.11",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "exoproc",
-      "version": "0.6.9",
+      "version": "0.6.10",
       "runtimeHint": "bunx",
       "transport": {
         "type": "stdio"

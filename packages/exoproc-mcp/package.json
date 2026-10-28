@@ -1,6 +1,6 @@
 {
   "name": "exoproc-mcp",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "description": "Dedicated Model Context Protocol (MCP) server for native Windows x64 reverse engineering, thread hijacking, function hooking, memory inspection, and JVM analysis.",
   "main": "./dist/index.js",
   "bin": {
@@ -50,5 +50,15 @@
     "win32-simulate": "workspace:*",
     "exoproc-accessors": "workspace:*",
     "exoproc-utils": "workspace:*"
-  }
+  },
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/exoproc-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  },
+  "mcpName": "io.github.w0ldan/exoproc"
 }

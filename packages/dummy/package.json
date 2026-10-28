@@ -1,6 +1,6 @@
 {
   "name": "exoproc-dummy",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "A single shared, long-lived dummy Windows process (default: ping.exe) other exoproc packages and tests spawn once and reuse as a lightweight cross-process target.",
   "main": "./dist/index.js",
   "exports": {
@@ -39,7 +39,8 @@
   "homepage": "https://github.com/w0ldan/exoproc#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/w0ldan/exoproc.git"
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/dummy"
   },
   "bugs": {
     "url": "https://github.com/w0ldan/exoproc/issues"

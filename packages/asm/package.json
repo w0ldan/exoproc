@@ -1,6 +1,6 @@
 {
   "name": "exoproc-asm",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Dependency-free typed x64 assembler for Exoproc.",
   "type": "module",
   "sideEffects": false,
@@ -31,5 +31,14 @@
     "assembler",
     "machine-code",
     "exoproc"
-  ]
+  ],
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/asm"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  }
 }

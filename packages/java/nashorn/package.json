@@ -1,6 +1,6 @@
 {
   "name": "exoproc-nashorn",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Pure TypeScript Nashorn runtime shims, template generators, and script simulator for the Exoproc / NJava ecosystem.",
   "main": "./dist/index.js",
   "exports": {
@@ -36,5 +36,14 @@
   "devDependencies": {
     "exoproc-mappings": "workspace:*",
     "typescript": "^5.8.2"
+  },
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/java/nashorn"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
   }
 }

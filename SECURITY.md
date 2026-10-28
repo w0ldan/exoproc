@@ -2,17 +2,17 @@
 
 ## Supported Versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.6.x   | :white_check_mark: |
-| < 0.6.0 | :x:                |
+| Version | Supported |
+| ------- | --------- |
+| 0.6.x   | Yes       |
+| < 0.6.0 | No        |
 
 ## Reporting a Vulnerability
 
 We take the security of Exoproc and its users seriously. If you discover a security vulnerability or architectural flaw:
 
 1. **Do NOT open a public GitHub issue.**
-2. Report the vulnerability privately by emailing `aw0ldan@gmail.com`.
+2. Report the vulnerability privately via [GitHub Private Vulnerability Reporting](https://github.com/w0ldan/exoproc/security/advisories/new).
 3. Include detailed steps to reproduce the issue, affected versions, and potential impact.
 4. We will acknowledge receipt within 48 hours and work with you on a coordinated disclosure timeline.
 

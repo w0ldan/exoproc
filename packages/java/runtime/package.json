@@ -1,6 +1,6 @@
 {
   "name": "exoproc-runtime",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Modular, identity-preserving hybrid/virtual/native Java runtime environment and class pool for the Exoproc / NJava ecosystem.",
   "main": "./dist/index.js",
   "exports": {
@@ -47,5 +47,14 @@
   },
   "devDependencies": {
     "typescript": "^5.8.2"
+  },
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/java/runtime"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "bun-xffi",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "Win32-optimized Cross-Process FFI foundation for Bun.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -51,7 +51,8 @@
   "homepage": "https://github.com/w0ldan/exoproc#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/w0ldan/exoproc.git"
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/xffi"
   },
   "bugs": {
     "url": "https://github.com/w0ldan/exoproc/issues"
