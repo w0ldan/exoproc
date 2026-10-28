@@ -1,0 +1,3 @@
+[test]
+preload = ["./dist-tests/setup.js"]
+timeout = 30000

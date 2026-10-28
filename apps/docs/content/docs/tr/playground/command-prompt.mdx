@@ -1,0 +1,402 @@
+---
+title: Win64 CMD
+description: "Simülasyondaki cmd.exe implementasyonu, video framebuffer'ı ve process başlatma yolu"
+---
+
+`Win32CommandPrompt`, görünüşte bir konsol metni üreten sahte component değildir. Global Win64 makinesi içinde VFS'deki `C:\Windows\System32\cmd.exe` image'ını yükler ve onun derlenmiş x64 entry point'iyle ana thread oluşturur.
+
+## Çalışan terminal
+
+Bunu canlı denemek için [Exoproc IDE](/tr/ide/explorer)'nin alt panelindeki **TERMINAL**'e bakın — orası da [xterm.js](https://xtermjs.org) ile render edilir ve gerçek bir `Win32CommandPrompt` oturumuna bağlıdır; kendi özel bir konsol tutmaz, yalnızca makinenin `screen`'ini render edip tuş vuruşlarını ona iletir. Yazdığınız her satır aşağıda anlatılan `cmd.exe`'nin derlenmiş x64 kodu tarafından işlenir.
+
+Backend doğrudan da kullanılabilir:
+
+```ts
+import { getGlobalWin64Machine, Win32CommandPrompt } from 'win32-simulate';
+
+const machine = getGlobalWin64Machine();
+const cmd = new Win32CommandPrompt(machine);
+
+cmd.screenText;
+// Microsoft Windows [Version 10.0.19045.4046]
+// ...
+// C:\Users\Serkan>
+
+cmd.execute('ver');
+cmd.execute('echo hello from Win64');
+cmd.execute('where whoami');
+cmd.execute('whoami');
+```
+
+Repo kökünden etkileşimli CMD doğrudan başlatılabilir:
+
+```bash
+bun run simulate:dev
+```
+
+Kök script runtime olarak `bun packages/simulate/src/cli.ts` kullanır. CLI, `Win32CommandPrompt` üzerinden VFS'deki `C:\Windows\System32\cmd.exe` image'ını yükler; host tarafında komut dispatch etmez. `win32-abi` gerçek `bun:ffi` tükettiği için bu giriş Node ile çalıştırılmaz. Oturum `exit` komutuyla veya `Ctrl+C` ile kapatılabilir.
+
+Bu, yalnızca geliştirme sırasında terminalden bağlanmak için bir senaryo — üretim/frontend tarafında bir "start" girişi değil, bu yüzden `dev` altında yaşıyor:
+
+```bash
+bun run dev --workspace @exoproc/simulate
+```
+
+Her `Win32CommandPrompt` kullanımı aynı global makinede yeni bir process açar. PID, address space, handle table, console buffer ve thread context'i diğer oturumlardan ayrıdır.
+
+## Sabit video output
+
+CMD çıktısı sınırsız büyüyen bir çıktı geçmişine eklenmez. Her console, varsayılan olarak **80 sütun × 25 satır** boyutunda sabit bir ASCII text-mode framebuffer taşır:
+
+```ts
+const video = cmd.process.console.videoOutput;
+
+video.columns; // 80
+video.rows; // 25
+video.snapshot().length; // 2000 byte
+video.cursor; // { column, row }
+```
+
+Her hücre tek bir ASCII byte'ıdır. Printable ASCII doğrudan hücreye yazılır; desteklenmeyen byte'lar `?` olur. `ENABLE_PROCESSED_OUTPUT` açıkken `CR`, `LF`, backspace ve sekme cursor'u değiştirir. Sağ kenarda satır sarılır, son satırdan sonra framebuffer bir satır yukarı kayar. VT/ANSI escape sequence'leri Windows framebuffer tarafından yorumlanmaz.
+
+`cls.exe` de bir escape string yazmaz. Derlenmiş x64 koduyla sırasıyla `GetStdHandle(STD_OUTPUT_HANDLE)`, `FillConsoleOutputCharacterA` ve `SetConsoleCursorPosition` importlarını çağırır. Console input ve output handle'larının modları `GetConsoleMode`/`SetConsoleMode` üzerinden ayrı tutulur; pipe ve file handle'ları console mode kabul etmez.
+
+`screenText`, bu sabit framebuffer'ın okunabilir görünümüdür; eski satırların tutulduğu ayrı bir geçmiş değildir. Ham hücreleri kopyalamak için `snapshot()` kullanılabilir. Windows framebuffer herhangi bir ANSI, TTY veya host cursor protokolü bilmez.
+
+`bun run simulate:dev` yalnız derlenmiş `cmd.exe` process'ini başlatır ve bu video output'u host console penceresine çizer. Debugger, event log veya ek bir kontrol paneli açmaz. Bun/Node host stream'leri cursor-positioning yeteneği sağlıyorsa platform adaptörü framebuffer'a abone olur; `revision` değiştiği anda yalnız değişen hücre aralıklarını ve cursor konumunu günceller. İlk çizim dışında 80×25 frame'in tamamı tekrar gönderilmez. Host output yönlendirilmişse test ve otomasyon için guest'in `WriteFile` çağrıları düz metin olarak aktarılır.
+
+```ts
+const stop = video.subscribe((changedVideo) => {
+  console.log(changedVideo.revision, changedVideo.cursor);
+});
+
+stop();
+```
+
+## Process başlangıcı ve I/O yolu
+
+Standart input/output sabit `0x04`/`0x08` değerleriyle kernel'e gömülü değildir. Her process kendi handle tablosuna ve şu üç process özelliğine sahiptir:
+
+```text
+STD_INPUT_HANDLE  (-10) → process.standardHandles.input
+STD_OUTPUT_HANDLE (-11) → process.standardHandles.output
+STD_ERROR_HANDLE  (-12) → process.standardHandles.error
+```
+
+I/O üç ayrı katmandır:
+
+```text
+TS kernel capability
+  → global kernel object id
+    → process-local HANDLE
+      → stdin/stdout/stderr slotu
+```
+
+`Win32CommandPrompt`, `cmd.exe` ana thread'i başlamadan `machine.createConsoleStdio()` çağırır. TS kernel bir console-input ve bir video-output object'i yaratır; opaque capability'leri process handle tablosuna kurar. Stdout ile stderr aynı video object'ine ve aynı local handle'a bağlanır. Guest kod framebuffer nesnesini, TS callback'ini veya kernel object registry'sini göremez.
+
+```ts
+const stdio = machine.createConsoleStdio();
+const process = machine.createProcess(profile, {
+  console: stdio.console,
+  stdio,
+});
+```
+
+Process'e stdio verilmezse kernel ona bloklamayan null input/output capability'leri kurar. Test veya host uygulaması çıktıyı göstermek yerine gözlemlemek isterse capture output verebilir:
+
+```ts
+const capture = machine.createCaptureOutput();
+const nullStdio = machine.createNullStdio();
+const process = machine.createProcess(profile, {
+  stdio: {
+    stdin: nullStdio.stdin,
+    stdout: capture.handle,
+    stderr: capture.handle,
+  },
+});
+
+capture.capture.text;
+```
+
+`CaptureOutput` byte'ları saklar fakat video framebuffer'a dokunmaz. `NullOutput` bütün byte'ları yutar ve başarılı yazma uzunluğunu döndürür. İstenirse `createOutputCapability()` ile aynı küçük `write(bytes)` sözleşmesini uygulayan başka bir host sink de kurulabilir.
+
+Loader aynı aşamada argument ve environment string'lerini guest process belleğine yazar; null-terminated `argv` ve `envp` pointer vektörlerini kurar. Main thread Windows x64 register düzeninin bu simülasyon için tanımlanan başlangıç sözleşmesiyle oluşturulur:
+
+```text
+RCX = argc
+RDX = argv
+R8  = envp
+```
+
+`cmd.exe` girişte `GetStdHandle` ile process'e atanmış input/output handle'larını alır. Banner'ı ve prompt'u output handle'ına yazar; ardından input handle'ında `ReadFile` ile bekler:
+
+```text
+cmd.exe main thread
+  → GetStdHandle(STD_OUTPUT_HANDLE)
+  → GetStdHandle(STD_INPUT_HANDLE)
+  → GetCurrentDirectoryA
+  → kernel32.dll!WriteFile
+  → kernel32.dll!ReadFile
+  → waiting
+```
+
+Host console bridge'in görevi yalnız girilen byte'ları console input kuyruğuna koyup bekleyen guest thread'i uyandırmaktır. Komutu seçen bir TypeScript `switch` bulunmaz.
+
+Input geldiğinde `ReadFile` thunk'ı yeniden yürür, satır `cmd.exe` data section'ındaki buffer'a yazılır ve guest kod `CreateProcessA(NULL, commandLine, ..., TRUE, ...)` çağırır. Child özel stdio belirtmezse parent'ın üç standart handle slotu otomatik kopyalanır. Handle tabloları process-local kalır fakat iki entry aynı global kernel object id'sine bakar; bu nedenle child aynı video output'a doğrudan yazabilir. `bInheritHandles`, standart slotlar dışındaki ek handle'ların aktarımını kontrol eder. Child tamamlanınca aynı main thread yeni prompt'u çizip yeniden `ReadFile` üzerinde bekler.
+
+Yönlendirme de aynı modelin parçasıdır. `CreatePipe` iki ayrı kernel handle'ı üretir; `SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0)` parent'ın okuma ucunun child'a geçmesini engeller. `STARTUPINFO.dwFlags` içindeki `STARTF_USESTDHANDLES` ayarlıysa loader `hStdInput`, `hStdOutput` ve `hStdError` alanlarını okur. Böylece bir child'ın stdout/stderr'i pipe'ın yazma ucuna bağlanabilir. Parent kendi yazma ucunu `CloseHandle` ile kapattıktan sonra `ReadFile(hReadPipe, ...)` ile guest çıktısını okur. Boş pipe'ta açık bir writer varsa thread bekler; bütün writer handle'ları kapandıysa EOF olarak sıfır byte döner.
+
+`CONIN$` ve `CONOUT$` bu aşamada global sihirli VFS yolları değildir. `CreateFile("CONOUT$")` video erişimi üretmez ve access-denied döner. Video object'ini yalnız TS kernel oluşturup capability olarak verebilir. Böylece guest bir handle değeri tahmin ederek, path açarak veya başka bir process'in tablosuna bakarak framebuffer'a ulaşamaz. İleride tam Windows console-attachment davranışı gerekirse bu yalnız TS tarafından verilebilen ayrı bir console-session capability üzerinde kurulabilir.
+
+## System32 executable'ları
+
+Komutların tamamı compiler tarafından executable image olarak üretilir ve sanal diskte görünür:
+
+```bat
+C:\Users\Serkan>dir C:\Windows\System32
+...
+cat.exe
+cd.exe
+chdir.exe
+clear.exe
+cls.exe
+cmd.exe
+dir.exe
+echo.exe
+exit.exe
+help.exe
+hostname.exe
+ls.exe
+path.exe
+ping.exe
+pwd.exe
+set.exe
+ver.exe
+where.exe
+whoami.exe
+whois.exe
+```
+
+Dosyaların ilk byte'ları özel container'ın `MZ` işaretini taşır; bu işaret tek başına image'ı PE yapmaz. Registry yalnız bir komut adı tablosu değildir; loader `.text` ve `.data` section'larını yeni process address space'ine map eder, import/data relocation'larını uygular ve child main thread'i x64 entry point'ten başlatır.
+
+`ls.exe`, `cls.exe`, `pwd.exe`, `ping.exe`, `cat.exe` ve diğerleri de `cmd.exe` ile aynı yoldan çalışır. `clear.exe`, registry içinde `cls.exe` code/data/relocation tablolarını paylaşan gerçek bir executable alias'ıdır; PATH çözümünde veya `cmd.exe` içinde isim kontrolü yapılmaz. Her iki ad da `GetStdHandle`, `FillConsoleOutputCharacterA` ve `SetConsoleCursorPosition` çağrılarını yapan aynı guest x64 image'ını çalıştırır. `pwd.exe` kendi compiler çıktısı üzerinden current directory sonucunu yazar. Argümansız `cd` sessizdir; current directory'yi yazdırma görevi `pwd.exe`dedir. `cd .`, `cd ..`, absolute ve relative Win32 yolları VFS normalizer üzerinden çözülür.
+
+`cat.exe`, bir veya daha fazla dosyayı `fopen` ile açar ve 4096 byte'lık guest buffer üzerinde `fread` → `fwrite` döngüsü çalıştırır. `fread` ve `fwrite`, `msvcrt.dll` içindeki x64 guest wrapper'lardır; C'nin `size × count` ve tamamlanan element sayısı kurallarını uygularlar. Gerçek I/O yalnız IAT üzerinden `kernel32!ReadFile` ve `kernel32!WriteFile` syscall'larına girince JS kernel'e geçer:
+
+```bat
+C:\Users\Serkan>cat C:\Lab\README.txt
+This drive is backed by the global Win32 VFS.
+```
+
+Executable kaynakları runtime kodunun içinde tutulmaz. `packages/simulate/src/bin/` dizini şu sınırları taşır:
+
+```text
+src/bin/
+├── cat.ts       # fread/fwrite kullanan cat.exe
+├── cd.ts        # cd.exe ve chdir.exe
+├── cls.ts       # cls.exe
+├── cmd.ts       # cmd.exe data section ve x64 main loop compiler'ı
+├── dll/
+│   ├── kernel32.ts
+│   ├── ntdll.ts
+│   ├── msvcrt.ts
+│   ├── user32.ts
+│   ├── gdi32.ts
+│   ├── advapi32.ts
+│   ├── psapi.ts
+│   ├── ws2_32.ts
+│   └── index.ts # DLL binary manifest'i ve varsayılan katalog
+├── echo.ts      # echo.exe argv döngüsü
+├── ls.ts        # ls.exe ve dir.exe
+├── path.ts      # path.exe
+├── ping.ts      # Winsock kullanan ping.exe
+├── pwd.ts       # pwd.exe
+├── set.ts       # set.exe
+├── where.ts     # where.exe
+├── whois.ts     # yerel loopback WHOIS registry istemcisi
+├── compiler.ts  # tip kontrollü x64 assembler ve executable builder
+├── system32.ts  # yalnız System32 kurulum manifest'i
+└── index.ts     # bin public export'ları
+```
+
+DLL dosyalarının ABI tanımları `win32-abi` içinde kalır; fakat simülatörde hangi binary binding'in üretileceği `src/bin/dll/` altındadır. Bu nedenle `kernel32.ts` gibi şimdilik yalnız ABI kaynağını varsayılan syscall thunk'larına bağlayan dosyalar çok kısadır. `msvcrt.ts`, `fopen`, `fread`, `fwrite` ve `printf` için gerçek x64 guest wrapper derler; `fclose` export'unu `kernel32!CloseHandle` adresine forward eder. `fread`/`fwrite`, unsigned `mul` ile byte sayısını hesaplayıp `ReadFile`/`WriteFile` sonucunu tamamlanmış element sayısına çevirir. `printf` format string'ini guest instruction'larıyla tarar, `%s`, `%d` ve `%%` dönüşümlerini yapar, `GetStdHandle(STD_OUTPUT_HANDLE)` ile process stdout'unu alır ve sonucu IAT üzerinden `WriteFile` çağırarak yazar. DLL davranışı runtime katalog kodunun içine gömülmez.
+
+`runtime/programs.ts` yalnız `Win32CompiledProgram` kabul eder; runtime sırasında çağrılan bir `compile(context)` veya `completed(context)` callback modeli yoktur. `system32.ts` de komut davranışı içermez; her modülün önceden ürettiği `.text`, `.data` ve relocation kayıtlarını uygun sanal path'e kurar.
+
+Executable kaynakları ham opcode dizileri yazmaz. `X64Assembler`, register genişliğini ve bellek operandını açıkça taşıyan instruction API'si sunar:
+
+```ts
+const success = code.createLabel('success');
+
+code.cmp('ecx', 1);
+code.je(success); // argümansız cd sessiz
+
+code.mov('rax', 'rdx');
+code.mov('rcx', qword('rax', 8));
+program.invoke(Win32Api.kernel32.SetCurrentDirectoryA);
+```
+
+`writePrompt`, `cleanup` ve `argumentLoop` gibi yerel prosedür/branch hedefleri `createLabel()` ile oluşturulan assembler sembolleridir; `call`, `jmp`, `je` ve `jne` serbest string kabul etmez. Sembol başka bir assembler'a aitse veya hiç bind edilmediyse image üretimi hata verir.
+
+DLL çağrıları da DLL ve export adlarını ayrı stringler olarak almaz. `Win32Api`, `win32-abi` içindeki canonical definition tablolarından otomatik üretilir. Örneğin `code.call(Win32Api.kernel32.WriteFile)` doğrudan import çağrısı üretir. `Win32Api.kernel32.WriteFile` DLL descriptor'ını, export adını ve mevcut ABI imzasını birlikte taşır; assembler relocation kaydını bu referanstan çıkarır. `program.invoke(...)` aynı referansı kabul edip Win64 shadow space düzenini de çağrının çevresine ekler.
+
+`dword('rax')` 32 bit ` [rax]`, `qword('rax', 8)` ise 64 bit `[rax + 8]` operandını ifade eder. Örneğin `eax` hedefine `qword` taşımak veya iki bellek operandı arasında doğrudan `mov` üretmek assembler tarafından reddedilir. REX, ModRM, SIB, immediate ve branch displacement byte'larını kodlamak yalnız assembler backend'inin iç işidir; `cd.ts`, `cmd.ts` ya da diğer executable kaynaklarına sızmaz.
+
+Executable `argc`, `argv` ve `envp` değerlerini doğrudan başlangıç register'larında alır; her programın `msvcrt.dll!__getmainargs` çağırarak aynı veriyi tekrar üretmesi gerekmez. Bundan sonraki seçim, branch ve Win32 API çağrıları x64 instruction'larıdır:
+
+```text
+cd.exe
+  → cmp ecx, 1
+  → qword [rdx + 8]
+  → kernel32.dll!SetCurrentDirectoryA
+  → test eax, eax
+  → başarı veya hata branch'i
+```
+
+Benzer şekilde `pwd.exe` doğrudan `GetCurrentDirectoryA`, `ls.exe` ise `FindFirstFileA` / `FindNextFileA` / `FindClose` çağırır. `cat.exe` dosya sistemine doğrudan erişmez; CRT wrapper'ları üzerinden `ReadFile` / `WriteFile` kullanır. JS kernel yalnız bu genel Win32/CRT syscall'larının semantiğini uygular; `cd`, `ls`, `cat` veya başka bir komut adına göre davranış seçmez.
+
+## Üretilen binary'leri inceleme
+
+Compiler ve DLL generator'ının bugün çıkardığı byte'lar tek komutla dökülebilir:
+
+```bash
+bun run simulate:inspect
+```
+
+Komut `packages/simulate/artifacts/` altında yeniden üretilebilir bir inceleme dizini oluşturur:
+
+```text
+artifacts/
+├── README.md
+├── manifest.json
+├── executables/
+│   ├── cmd.exe
+│   ├── cmd.exe.text.bin
+│   ├── cmd.exe.linked.text.bin
+│   ├── cmd.exe.iat.bin
+│   ├── cmd.exe.data.bin
+│   ├── cmd.exe.dis
+│   ├── cmd.exe.asm
+│   └── cmd.exe.json
+└── dlls/
+    ├── kernel32.dll.memory.bin
+    ├── kernel32.dll.iat.bin
+    ├── kernel32.dll.dis
+    ├── kernel32.dll.asm
+    ├── kernel32.dll.json
+    ├── msvcrt.dll.memory.bin
+    ├── msvcrt.dll.iat.bin
+    ├── msvcrt.dll.dis
+    ├── msvcrt.dll.asm
+    └── msvcrt.dll.json
+```
+
+EXE altındaki çıplak `.exe`, VFS'e kurulan özel `EXOPROC64` container'ın birebir kopyasıdır. `.text.bin` compiler'ın relocation öncesi code byte'larını, `.linked.text.bin` loader'ın RIP-relative IAT displacement ve data adreslerini çözdükten sonra process memory'sine map ettiği `.text` byte'larını, `.iat.bin` ise salt-okunur Import Address Table slotlarını verir.
+
+`.dis` gerçek decoder raporudur: absolute virtual address, section başlangıcı, section içi offset, instruction byte'ları, relocation hedefi ve branch target aynı dosyada görünür. Import çağrıları linked formuyla `call [rip+disp32]` olarak yazılır; aynı satırda IAT slot adresi, slotun çözüldüğü DLL exportu ve hedef adres bulunur. Ayrı `.idata` bölümü bütün slot byte'larını ve `state=resolved` durumunu listeler. Bu çıktı assemble edilmek için değildir.
+
+`.asm` ise link öncesi NASM kaynağıdır. `BITS 64`, `DEFAULT REL`, `extern` importlar, `global` entry point, section sembolleri, gerçek instruction'lar ve local label'lar kullanır. Assembly katmanı bütün Win32 DLL'lerini tek bir import library gibi görür; bu nedenle semboller `extern WriteFile` ve `extern SetCurrentDirectoryA` biçimindedir, DLL adı sembole eklenmez. DLL adı relocation metadata'sında korunur. `Win32ExportCatalog`, bu kısa sembollerin güvenli olması için export adlarının bütün DLL'ler arasında global olarak benzersiz olduğunu doğrular ve bir çakışma oluşursa katalog üretimini durdurur.
+
+Image base, section RVA, IAT adresi veya DLL export adresi kaynakta sabitlenmez. `.asm` IAT uygulama ayrıntısını bilerek göstermez: çağrı `call WriteFile` olarak kalır ve NASM bunu `IMAGE_REL_AMD64_REL32` COFF relocation kaydına dönüştürür. `.text`, `.rdata`, `.data` ve `.bss` ayrımı Win64 COFF section'ları olarak yazılır; data operandları da object relocation kayıtlarına dönüşür.
+
+```bash
+nasm -f win64 cd.exe.asm -o cd.exe.obj
+```
+
+Object tek başına executable değildir. COFF relocation hedefleri, EXOPROC internal compiler çıktısındaki relocation hedefleriyle aynıdır. EXOPROC loader her benzersiz import için `.idata` içinde sekiz byte'lık bir slot ayırır, slotu `win32-abi` export kataloğundan çözülen adresle doldurur ve guest code'u `call qword [rip+disp32]` biçiminde bu slota bağlar. Aynı exportu çağıran bütün instruction'lar aynı slotu kullanır. `.idata` mapping'i link tamamlandıktan sonra salt-okunurdur.
+
+Mevcut loader henüz COFF `.obj` dosyasını doğrudan parse etmez; kendi `EXOPROC64` relocation tablosunu çözer. Her instruction'ın yanında yalnız karşılaştırma amacıyla loader sonrasında gözlenen virtual address ve opcode byte'ları yorum olarak korunur; sabit adres operandı olarak kullanılmaz.
+
+Sistemde NASM kuruluysa bütün artifact kaynakları tek komutla yeniden üretilip gerçek assembler ile doğrulanabilir:
+
+```bash
+bun run simulate:inspect:nasm
+```
+
+DLL `.memory.bin` dosyası process'e map edilen export slotlarının tamamını, `.iat.bin` DLL'in guest wrapper ve forwarder import slotlarını içerir. DLL için de `.dis`, `fopen → IAT → CreateFileA`, `fclose → IAT → CloseHandle` ve `printf → IAT → GetStdHandle/WriteFile` zincirlerini kesin adres ve byte'larla gösterir. `.asm` ise IAT tablosunu göstermeden `global printf`, `extern GetStdHandle`, `extern WriteFile` ve `call WriteFile` gibi link-öncesi sembolleri taşır. Forwarder ve guest wrapper importları compile sırasında mutlak adrese çevrilmez; DLL loader IAT relocation kayıtlarını map sırasında export kataloğuyla çözer.
+
+Mevcut thunk compiler henüz ayrı DLL data section'ları üretmediği için `.rdata`, `.data` ve `.bss` section'ları açıkça `empty` olarak işaretlenir.
+
+Bu çıktılar mevcut seviyeyi bilerek açık eder: EXE dosyaları `MZ` ile başlasa da geçerli PE32+ değildir; DLL image'larında da PE header, import/export directory veya relocation table yoktur. Dolayısıyla Windows loader'ında henüz açılamazlar. Artifact dizini generated olduğu için Git'e eklenmez; komut her çalıştırıldığında güncel compiler ve ABI kataloğundan yeniden oluşur.
+
+Inspect kodu runtime paketinin parçası değildir. Yalnız geliştirme için `packages/simulate/scripts/inspect-artifacts.ts` altında bulunur; package TypeScript yapılandırması sadece `src/` dizinini derler. `package.json` içindeki `files` allowlist'i de yalnız `dist` ve lisansı yayınladığı için `scripts/`, `artifacts/` ve testler npm paketine girmez.
+
+## Loopback Winsock ve ping.exe
+
+`ping.exe` önceden TypeScript tarafından hazırlanmış bir başarı metni yazmıyor. `src/bin/ping.ts` içindeki compiler aşağıdaki gerçek guest çağrı akışını üretir:
+
+```text
+ping.exe
+  → ws2_32.dll!WSAStartup
+  → ws2_32.dll!socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)
+  → ws2_32.dll!inet_addr
+  → ws2_32.dll!sendto
+  → ws2_32.dll!recvfrom
+  → ws2_32.dll!closesocket
+  → ws2_32.dll!WSACleanup
+```
+
+Simüle edilen IPv4 ağı bilerek yalnız `127.0.0.0/8` loopback bloğunu route eder. ICMP echo request aynı process'in sanal socket receive kuyruğuna echo reply olarak bırakılır. `localhost`, `127.0.0.1` adresine çözülür.
+
+```bat
+C:\Users\Serkan>ping 127.0.0.1
+Reply from 127.0.0.1: bytes=8 time<1ms TTL=128
+
+C:\Users\Serkan>ping 8.8.8.8
+PING: transmit failed. 8.8.8.8 is outside the simulated loopback network.
+```
+
+Loopback dışındaki bir hedefte `sendto`, `WSAEHOSTUNREACH` döndürür ve `ping.exe` exit code `1` ile kapanır. Transport katmanında host socket, `fetch`, WebSocket, DNS veya başka bir internet API'si bulunmaz; dolayısıyla guest kodun gerçek internete çıkabileceği bir fallback yolu yoktur.
+
+`whois.exe` de aynı sınırı korur. `whois localhost` veya `whois 127.0.0.1`, simülatörün yerel `EXOPROC-LOOPBACK` kaydını döndürür. Dış IP ve domain sorguları internet WHOIS sunucusuna gönderilmez; açıklayıcı bir hata ve exit code `1` üretilir.
+
+## Environment, PATH ve child process
+
+Her bağımsız console oturumu kendi case-insensitive environment tablosunu ve current-directory session'ını taşır. `cmd.exe` tarafından açılan command executable'ları aynı shell session'ını kullanır; böylece assembly içindeki `SetCurrentDirectoryA`, `SetEnvironmentVariableA` ve `_putenv` çağrıları sonraki prompt'u etkiler. Ayrı açılan `Win32CommandPrompt` oturumları ise birbirinden izole kalır. Varsayılan tabloda `PATH`, `PATHEXT`, `COMSPEC`, `SYSTEMROOT`, `USERPROFILE` ve diğer temel Win32 değişkenleri bulunur.
+
+```bat
+C:\Users\Serkan>set LAB_VALUE=ok
+C:\Users\Serkan>echo %LAB_VALUE%
+ok
+
+C:\Users\Serkan>where hello
+C:\Lab\hello.exe
+```
+
+`cmd.exe`, aldığı her satırı doğrudan `CreateProcessA` çağrısına verir. Loader:
+
+1. Komutta explicit path varsa o path'i, yoksa current directory ve `PATH` dizinlerini gezer.
+2. Uzantı verilmemişse `PATHEXT` sırasıyla `.COM`, `.EXE`, `.BAT` ve `.CMD` adaylarını dener.
+3. VFS girdisinin gerçekten file olduğunu doğrular.
+4. Compiler registry'de karşılığı varsa yeni PID, address space, environment ve thread ile child process başlatır.
+5. Hiçbir aday bulunamazsa `CreateProcessA` başarısız döner ve guest `cmd.exe` kendi input buffer'ındaki adı kullanarak `'... is not recognized'` mesajını `WriteFile` ile üretir.
+
+`cmd.exe`, `ls.exe`, `cls.exe`, `pwd.exe`, `ping.exe`, `cat.exe`, diğer System32 araçları ve `C:\Lab\hello.exe` küçük compiler tarafından x64 code, data ve import relocation'ları olarak üretilir. Loader child process açıldıktan sonra `kernel32.dll!WriteFile` gibi import adreslerini o process'in DLL export tablosundan çözer. Programın ekrana yazması:
+
+```text
+cmd.exe main thread
+  → CreateProcessA
+  → PATH/PATHEXT resolver
+  → NtCreateUserProcess
+  → compiler output .text/.data mapping
+  → import relocation
+  → argc/argv/envp ve standard handle kurulumu
+  → child main thread
+  → kernel32!WriteFile
+  → child ret
+```
+
+şeklinde gerçekleşir. VFS'de bulunan fakat compiler/loader registry'sinde tanınmayan bir dosya için `not a valid Win32 application` hatası verilir.
+
+TypeScript tarafındaki `Win32CommandPrompt` komut parse veya dispatch etmez; yalnız console input'unu kuyruğa koyar ve guest thread'i `ReadFile` beklemesine kadar sürer. Genel PE32+ loader, batch yorumlayıcısı ve System32 programlarının daha geniş Win32 API yüzeyini kullanması sonraki aşamadır.
+
+## Debugger'a bağlama
+
+Oturumun process ve ana thread kimliği doğrudan erişilebilirdir:
+
+```ts
+const process = cmd.process;
+const thread = process.getThread(cmd.mainThreadId);
+```
+
+`execute()` sonucu son guest API çağrısının `CpuStepResult[]` trace'ini de döndürür. Böylece frontend daha sonra CMD ekranını ve debugger'ı birbirinden bağımsız component'ler olarak aynı process üzerinde gösterebilir.

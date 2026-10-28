@@ -1,0 +1,97 @@
+---
+title: 'Deobfuscation & Mappings'
+description: 'Resolving obfuscated Minecraft and Java applications with JavaMappingRegistry for transparent class, field, and method access.'
+---
+
+Commercial Java software and vanilla Minecraft releases are typically protected using ProGuard or custom obfuscators. Class names are minified to identifiers like `ave`, fields to `h`, and methods to `a`.
+
+Exoproc provides the **`JavaMappingRegistry`** architecture to handle deobfuscation transparently at runtime. Developers write readable, clean code, while Exoproc resolves the corresponding obfuscated symbols behind the scenes.
+
+## How It Works
+
+```text
+Developer TypeScript Code
+const mc = Java.type('net.minecraft.client.Minecraft').getMinecraft();
+mc.thePlayer.sendChatMessage('Hello!');
+                          │
+                          ▼
+             JavaMappingRegistry
+  ┌────────────────────────────────────────────────────────┐
+  │ net.minecraft.client.Minecraft ──► ave                 │
+  │ getMinecraft()                 ──► A()                 │
+  │ thePlayer                      ──► h                   │
+  │ sendChatMessage()              ──► e()                 │
+  └────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+            Target JVM Runtime
+ave.A().h.e("Hello!");
+```
+
+## Manual Mapping: `Java.mapClass()`
+
+For targeted hooks or lightweight scripts, mappings can be registered directly:
+
+```typescript
+// Register class and member mappings
+Java.mapClass('ave', 'net.minecraft.client.Minecraft', {
+  fields: {
+    h: 'thePlayer',
+    f: 'theWorld',
+    u: 'gameSettings',
+  },
+  methods: {
+    A: 'getMinecraft',
+    s: 'runTick',
+  },
+});
+
+// Register individual fields or methods
+Java.mapField('ave', 'm', 'currentScreen');
+Java.mapMethod('ave', 'g', 'toggleFullscreen');
+```
+
+Once registered, `Java.type` resolves the deobfuscated name directly:
+
+```typescript
+const Minecraft = Java.type('net.minecraft.client.Minecraft');
+const mc = Minecraft.getMinecraft();
+
+// Deobfuscated field access
+console.log('Current screen:', mc.currentScreen);
+
+// Deobfuscated method invocation
+mc.toggleFullscreen();
+```
+
+## Integration with Mapping Pools
+
+For extensive automation environments, manually registering thousands of classes is impractical. Exoproc integrates with **`exoproc-mappings`** (and `njava-mappings`) database loaders.
+
+Supported mapping standards include **Mojang Official**, **Fabric Yarn**, **MCP (Mod Coder Pack)**, and **Intermediary**:
+
+```typescript
+import { JavaMappingRegistry } from 'bun-njava';
+import { loadMojangMappings } from 'exoproc-mappings';
+
+// 1. Load official Mojang mappings table
+const mappings = await loadMojangMappings('1.20.4');
+
+// 2. Initialize registry
+const mapper = new JavaMappingRegistry();
+mapper.load(mappings);
+
+// 3. Bind to JavaContext
+const Java = createJavaContext(bridge, true, mapper);
+
+// All official Mojang names resolve automatically!
+const BlockPos = Java.type('net.minecraft.core.BlockPos');
+const pos = new BlockPos(100, 64, -200);
+```
+
+## Bi-Directional Resolution
+
+`JavaMappingRegistry` operates in both directions:
+
+- **Obfuscated -> Deobfuscated:** When instances or errors are received from the target JVM, classes (e.g. `ave`) are converted back to clean names (`net.minecraft.client.Minecraft`) in logs and inspector tools.
+- **Deobfuscated -> Obfuscated:** When developers invoke `Java.type()`, read fields, or call methods using clean names, Exoproc translates them to the actual symbols present in the target process.

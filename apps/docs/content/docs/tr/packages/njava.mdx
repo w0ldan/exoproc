@@ -1,0 +1,76 @@
+---
+title: 'NJava Paket Ekosistemi'
+description: 'Bun için kapsamlı JVM tersine mühendislik, yansıma, süreç içi ajan köprüsü ve bellek içi bayt kodu derleme ekosistemi.'
+---
+
+NJava paketi ailesi, yerel DLL enjeksiyonuna ihtiyaç duymadan canlı Windows süreçleri içerisindeki Java Sanal Makineleriyle (JVM) etkileşim kurmak için eksiksiz ve modüler bir ekosistem sunar.
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                          NJava Ekosistemi                              │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+    ┌───────────────┬───────────────┼───────────────┬────────────────┐
+    ▼               ▼               ▼               ▼                ▼
+bun-njava      njava-agent    njava-runtime   exoproc-mappings  exoproc-jjit
+(JNI Köprüsü & (Süreç İçi     (Betik          (Karartma Çözme   (Bellek İçi ECJ
+ Dinamik Vekil) HTTP RPC)      Uyumluluk)      Haritaları)       Derleyicisi)
+```
+
+## Ekosistemdeki Paketler
+
+### 1. `bun-njava`
+
+Temel JVM köprü katmanıdır.
+
+- Süreçler arası bellek erişimcileriyle doğrudan `jvm.dll` modülüne bağlanır.
+- `JNIEnv` fonksiyon tablolarını çözer (`FindClass`, `GetMethodID`, `CallObjectMethod` vb.).
+- Java sınıflarını ve nesne örneklerini dinamik TypeScript/JavaScript nesneleri olarak şeffafça vekiller.
+- Java `Throwable` istisnalarını yerel JavaScript hatalarına dönüştürür.
+
+### 2. `njava-agent`
+
+Yüksek hızlı süreç içi Java ajanıdır.
+
+- Tamamen RAM üzerinde `ClassLoader.defineClass` ile enjekte edilir (diske JAR yazılmaz).
+- Saniyede 50.000'den fazla çağrı için `127.0.0.1` üzerinde hafif bir HTTP/İkili RPC sunucusu çalıştırır.
+- Yüksek frekanslı oyun tik olaylarını ve varlık takibini gecikmesiz yönetir.
+
+### 3. `njava-runtime`
+
+Modüler betik çalıştırma ve Nashorn uyumluluk katmanıdır.
+
+- Modern Java 17, 21 ve 25+ sürümlerinde Nashorn genel fonksiyonlarını (`Java.type`, `Java.from`, `Java.to`, `Java.extend`) yeniden uygular.
+- Dört temel `ClassDefiner` stratejisini içerir (`auto`, `unsafe`, `classLoader`, `agent`).
+- Güvenli betik yürütme için `ScriptRunner` motorunu sağlar.
+
+### 4. `exoproc-mappings`
+
+Çoklu sürüm karartma çözme (deobfuscation) motorudur.
+
+- Mojang, Fabric Intermediary, Yarn, Forge MCP ve Searge harita formatlarını destekler.
+- Metot, alan ve sınıf isimlerinin hızlı çözümlenmesi için SQLite ve JSON tabanlı dizinleyiciler kullanır.
+- Dinamik `JavaMappingRegistry` ile karartılmış sembolleri çalışma anında şeffafça çözer.
+
+### 5. `exoproc-jjit`
+
+Bellek içi Java derleyicisi ve bayt kodu yeniden haritalayıcısıdır.
+
+- Çift sürüm gömülü Eclipse Compiler for Java içerir (Java 8 için ECJ 3.26, Java 17+ için ECJ 3.46).
+- Harici derleyiciye ihtiyaç duymadan RAM üzerinde doğrudan bayt kodu (`0xCAFEBABE`) üretir.
+- Bayt kodundaki isim uzaylarını dönüştürmek için entegre Tiny-Remapper barındırır.
+
+---
+
+## Kurulum & Çalıştırma
+
+Tüm paketler Exoproc Bun çalışma alanının (workspace) bir parçasıdır:
+
+```bash
+# Bağımlılıkları yükleyin ve ECJ / Capstone ikili dosyalarını indirin
+bun install
+bun run download-deps
+
+# Tüm paketleri derleyin
+bun run build
+```

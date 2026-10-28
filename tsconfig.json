@@ -1,0 +1,150 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "types": ["bun"],
+    "typeRoots": ["./node_modules/@types", "./node_modules/bun-types"],
+    "allowJs": false,
+    "checkJs": false,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "useUnknownInCatchVariables": true,
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": false,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "incremental": true,
+    "ignoreDeprecations": "5.0",
+    "paths": {
+      "exoproc-utils": ["./packages/utils/src/index.ts"],
+      "exoproc-asm": ["./packages/asm/src/index.ts"],
+      "bun-xffi": ["./packages/xffi/src/index.ts"],
+      "exoproc-accessors": ["./packages/accessors/src/index.ts"],
+      "exoproc-dummy": ["./packages/dummy/src/index.ts"],
+      "bun-capstone": ["./packages/capstone/core/src/index.ts"],
+      "bun-capstone-abi": ["./packages/capstone/abi/src/index.ts"],
+      "bun-winapi": ["./packages/win32/api/src/index.ts"],
+      "bun-nthread": ["./packages/nthread/src/index.ts"],
+      "bun-minhook": ["./packages/minhook/src/index.ts"],
+      "bun-nshm": ["./packages/nshm/src/index.ts"],
+      "bun-njava": ["./packages/java/njava/src/index.ts"],
+      "bun-njava/reflection-parser": [
+        "./packages/java/njava/src/reflection-parser.ts"
+      ],
+      "@exoproc/win32-abi": ["./packages/win32/abi/src/index.ts"],
+      "win32-abi": ["./packages/win32/abi/src/index.ts"],
+      "@exoproc/simulate": ["./packages/simulate/src/index.ts"],
+      "simulate": ["./packages/simulate/src/index.ts"],
+      "win32-simulate": ["./packages/simulate/src/index.ts"],
+      "@exoproc/simulate/files": [
+        "./packages/simulate/src/platform/files/index.ts"
+      ],
+      "simulate/files": ["./packages/simulate/src/platform/files/index.ts"],
+      "win32-simulate/files": [
+        "./packages/simulate/src/platform/files/index.ts"
+      ],
+      "win32-simulate/bun-ffi": ["./packages/simulate/src/runtime/bun-ffi.ts"],
+      "exoproc-minecraft": ["./packages/minecraft/src/index.ts"],
+      "exoproc-mappings": ["./packages/java/mappings/src/index.ts"],
+      "exoproc-nashorn": ["./packages/java/nashorn/src/index.ts"],
+      "exoproc-runtime": ["./packages/java/runtime/src/index.ts"],
+      "exoproc-jjit": ["./packages/java/jjit/src/index.ts"],
+      "exoproc-jjit/compiler": ["./packages/java/jjit/src/compiler.ts"],
+      "exoproc-jjit/remapper": ["./packages/java/jjit/src/remapper.ts"],
+      "exoproc-jjit/builder": ["./packages/java/jjit/src/builder.ts"],
+      "exoproc-jjit/modifiers": ["./packages/java/jjit/src/modifiers.ts"],
+      "njava-agent": ["./packages/java/agent/src/index.ts"],
+      "exoproc-mcp": ["./packages/exoproc-mcp/src/index.ts"],
+      "exoproc-runner": ["./packages/runner/src/index.ts"],
+      "exoproc": ["./packages/exoproc/src/index.ts"]
+    }
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/runner"
+    },
+    {
+      "path": "./packages/utils"
+    },
+    {
+      "path": "./packages/win32/abi"
+    },
+    {
+      "path": "./packages/asm"
+    },
+    {
+      "path": "./packages/java/mappings"
+    },
+    {
+      "path": "./packages/java/nashorn"
+    },
+    {
+      "path": "./packages/xffi"
+    },
+    {
+      "path": "./packages/dummy"
+    },
+    {
+      "path": "./packages/capstone/abi"
+    },
+    {
+      "path": "./packages/capstone/core"
+    },
+    {
+      "path": "./packages/win32/api"
+    },
+    {
+      "path": "./packages/java/jjit"
+    },
+    {
+      "path": "./packages/java/agent"
+    },
+    {
+      "path": "./packages/nthread"
+    },
+    {
+      "path": "./packages/nshm"
+    },
+    {
+      "path": "./packages/java/njava"
+    },
+    {
+      "path": "./packages/java/runtime"
+    },
+    {
+      "path": "./packages/accessors"
+    },
+    {
+      "path": "./packages/minhook"
+    },
+    {
+      "path": "./packages/minecraft"
+    },
+    {
+      "path": "./packages/simulate"
+    },
+    {
+      "path": "./packages/exoproc-mcp"
+    },
+    {
+      "path": "./packages/exoproc"
+    }
+  ]
+}

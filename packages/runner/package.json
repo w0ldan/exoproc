@@ -1,0 +1,38 @@
+{
+  "name": "exoproc-runner",
+  "version": "0.6.5",
+  "description": "Contextual execution runner and ambient accessor environment for Windows x64 reverse engineering, Win32 calls, and automation scripts.",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "exoproc",
+    "runner",
+    "accessor",
+    "ambient-context",
+    "win32",
+    "reverse-engineering"
+  ],
+  "author": "Serkan",
+  "dependencies": {
+    "bun-winapi": "workspace:*",
+    "bun-xffi": "workspace:*",
+    "exoproc-accessors": "workspace:*",
+    "exoproc-utils": "workspace:*"
+  }
+}

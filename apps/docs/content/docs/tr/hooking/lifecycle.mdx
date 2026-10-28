@@ -1,0 +1,28 @@
+---
+title: 'Hook yaşam döngüsü'
+description: "NHook ve MinHook'ta create, enable, disable ve destroy ayrı adımlardır. Ortak isimlere rağmen cleanup ve hit işleme davranışları aynı değildir;..."
+---
+
+NHook ve MinHook'ta `create`, `enable`, `disable` ve `destroy` ayrı adımlardır. Ortak isimlere rağmen cleanup ve hit işleme davranışları aynı değildir; hook türünü bilmeden genel bir “disable et ve kapat” kuralı yeterli değildir.
+
+```text
+create → hedef/prologue'u doğrula → enable → işle → disable → destroy
+```
+
+## Create ve enable
+
+`NHook.create()` hedefin başından en az iki byte kaplayacak tam talimatları çözer ve özgün byte'ları saklar. `MinHook.create()` yeterli prologue'u taşıyan bir trampoline üretir; bu aşama hedefi patch'lemez. Her iki yol için hedef adresinin doğru process'te, executable bellekte ve çözümlenebilir bir fonksiyon başlangıcında olması gerekir.
+
+Enable sırasında patch yazabilmek için koruma geçici olarak `EXECUTE_READWRITE` yapılır ve önceki koruma geri yüklenir. Uzak hedefte NHook, patch sırasında erişebildiği diğer thread'leri askıya alır; NThread tabanlı accessor'ın driving thread'i bu işlemden özellikle hariç tutulur. Bu, ayrı suspend sayaçlarının NThread resume akışıyla çakışmasını önler.
+
+## NHook hit'i kapatmak değildir
+
+NHook'ta `poll()` hook'a gelmiş bir thread'i yakalar. `resume(hit)` ya dönüş değerini zorlar ya da taşınan talimatların desteklenen kısmını simüle edip yürütmeyi sürdürür. Bu işlem context'i uygular, fakat park edilmiş thread'i kendi başına serbest bırakmaz; NHook'un mevcut akışında tam accessor'ın `deinit()` edilmesi thread'i bırakma ve kaynak temizliğinin parçasıdır.
+
+Bu nedenle NHook hit'i ile çalışırken accessor sahipliğini ve `deinit()` zamanını açıkça tasarlayın. Birden çok hit, uzun süren kullanıcı kodu veya desteklenmeyen prologue talimatları için lifecycle'ı küçük, kontrollü bir hedefte doğrulayın.
+
+## Disable ve destroy
+
+`disable()` hedefin özgün byte'larını geri yazar; `destroy()` etkin hook'u önce disable eder, sonra hook kaydını ve MinHook'ta trampoline/relay kaynaklarını kaldırır. Disable sonrasında hedefin yeni çağrılarının özgün koda gittiğini doğrulayın. Hedef process kapanırken ya da timeout sonrası context belirsizken cleanup'ın kusursuz geri dönüş sağlayacağını varsaymayın.
+
+Kapanış yolunu normal akış kadar test edin: `try/finally` kullanın, aynı adrese ikinci hook kurmayın ve hata anında hangi accessor'ın hangi thread'i sürdüğünü loglayın.

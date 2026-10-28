@@ -1,0 +1,86 @@
+---
+title: 'Exception Handling & Unwrapping'
+description: 'Automatic unwrapping of Java Throwables and InvocationTargetException chains into standard JavaScript Error objects.'
+---
+
+Bridging exceptions between the Java Virtual Machine and the JavaScript runtime requires seamless unwrapping. Exoproc intercepts JVM exceptions, traverses reflection chains, and produces standard JavaScript `Error` objects suitable for standard `try / catch` handling.
+
+## Automatic Exception Unwrapping
+
+When reflective methods (`Method.invoke` or `Constructor.newInstance`) fail, the JVM encapsulates the underlying error inside a `java.lang.reflect.InvocationTargetException` (ITE).
+
+Exoproc's `checkAndUnwrapException` handler resolves this transparently:
+
+```text
+Underlying JVM Error: NullPointerException
+         │
+    Wrapped in: InvocationTargetException
+         │
+    JNI Detection: ExceptionOccurred()
+         │
+    Clear State: ExceptionClear() (preserves JVM health)
+         │
+    Root Cause Traversal: Throwable.getCause() loop
+         │
+    JavaScript: ReflectiveInvokeError ("NullPointerException: target is null")
+```
+
+1. **Immediate State Clearing (`ExceptionClear`):** The pending JVM exception is cleared immediately so subsequent JNI calls do not fault or enter illegal states.
+2. **Root Cause Traversal:** Follows the `getCause()` chain to reach the original thrown exception (such as `NullPointerException` or `IllegalArgumentException`).
+3. **Descriptive Formatting:** Extracts the Java class name and `getMessage()` string into a clear error message.
+
+## Standard `try / catch` Syntax
+
+You can catch Java runtime errors using normal TypeScript / JavaScript `try / catch` blocks:
+
+```typescript
+const Integer = Java.type('java.lang.Integer');
+
+try {
+  // Attempt to parse invalid number (throws NumberFormatException)
+  const num = Integer.parseInt('invalid_num');
+} catch (err: any) {
+  console.error('Caught error:', err.message);
+  // Output: Reflective invocation threw: java.lang.NumberFormatException: For input string: "invalid_num"
+}
+```
+
+## Error Hierarchy (`NJavaError`)
+
+Exoproc provides dedicated error classes deriving from `NJavaError`:
+
+| Error Class                | Trigger                                                                    |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `JvmModuleNotFoundError`   | Target process modules do not contain `jvm.dll`                            |
+| `JvmGetCreatedVmError`     | `JNI_GetCreatedJavaVMs` returned non-zero status or found no JVM instances |
+| `JvmGetEnvError`           | `JavaVM::GetEnv` failed for current thread context                         |
+| `ClassNotFoundError`       | Target Java class could not be resolved by name or class loader            |
+| `MethodNotFoundError`      | Method name or matching signature not found on class                       |
+| `FieldNotFoundError`       | Field name not found on class                                              |
+| `ConstructorNotFoundError` | No constructor matches the supplied argument types                         |
+| `ReflectiveInvokeError`    | Target Java method or constructor threw a `Throwable`                      |
+
+### Typed Error Catching Example
+
+```typescript
+import {
+  ClassNotFoundError,
+  MethodNotFoundError,
+  ReflectiveInvokeError,
+} from 'bun-njava';
+
+try {
+  const Player = Java.type('net.minecraft.entity.player.EntityPlayer');
+  Player.unknownMethod();
+} catch (err) {
+  if (err instanceof ClassNotFoundError) {
+    console.error(`Missing class: ${err.className}`);
+  } else if (err instanceof MethodNotFoundError) {
+    console.error(`Missing method: ${err.methodName}`);
+  } else if (err instanceof ReflectiveInvokeError) {
+    console.error(`Java exception: ${err.aoString}`);
+  } else {
+    throw err;
+  }
+}
+```

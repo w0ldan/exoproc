@@ -1,0 +1,123 @@
+---
+title: 'Exoproc Birleşik Paketi & İşletim Sistemi Mimarisi'
+description: 'İşletim sistemine duyarlı yerel süreç içi çalıştırma ile birleşik CLI aracı, otomasyon istemcisi, arka plan köprüsü ve MCP sunucusu.'
+---
+
+`exoproc` paketi, çerçevenin en üst düzey orkestrasyon katmanıdır. Önceden ayrı olan servis, araç ve istemci paketlerini tek bir birleşik ve işletim sistemine duyarlı (OS-aware) pakette toplar.
+
+## İşletim Sistemine Duyarlı Çalışma Modeli
+
+Tüm işletim sistemlerinde gereksiz bir arka plan servisi zorunlu kılmak yerine `exoproc`, çalıştığı işletim sistemine göre mimarisini otomatik olarak uyarlar:
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                        exoproc (Birleşik CLI)                          │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+           ┌────────────────────────┴────────────────────────┐
+           ▼                                                 ▼
+    Windows (Doğal / Yerel)                       Linux / Wine / macOS
+┌─────────────────────────┐                       ┌─────────────────────────┐
+│ Doğrudan Süreç İçi Araç │                       │   Daemon Servis Köprüsü │
+│ • Daemon gerektirmez    │                       │ • exoproc daemon başlatır│
+│ • Doğrudan Win32 Belleği│                       │ • Yerel HTTP/SSE ile    │
+│ • Doğrudan JNI & Kanca  │                       │   haberleşir            │
+│ • Sıfır IPC gecikmesi   │                       │ • Wine içine bağlanır   │
+└─────────────────────────┘                       └─────────────────────────┘
+```
+
+### 1. Windows Üzerinde (Doğal Hedef)
+
+Doğal Windows x64 sistemlerinde `exoproc`, harici bir arka plan servisi (daemon) çalıştırmaz. Bunun yerine **doğrudan süreç içinde** yerel bir CLI aracı olarak çalışır:
+
+- `bun-winapi`, `bun-xffi` ve `bun-njava` paketlerine doğrudan bağlanır.
+- Win32 süreç ve bellek API'lerini aracı olmadan çağırır.
+- Otomasyon betiklerini sıfır IPC gecikmesiyle yerel Bun süreci içinde çalıştırır.
+
+### 2. Linux / Wine / macOS Üzerinde (Çapraz Ortam)
+
+Linux veya macOS ortamında geliştirme yaparken ve Wine içerisindeki bir Windows sürecini hedeflerken:
+
+- `exoproc`, Wine arka plan servis köprüsünü (`exoproc daemon`) otomatik olarak başlatır veya ona bağlanır.
+- Komutlar yerel HTTP/SSE akış uç noktaları üzerinden dağıtılır (`127.0.0.1:43370`).
+- Ana makine ile Wine sınırları arasında kesintisiz uzaktan denetim, ekran görüntüsü ve komut çalıştırma imkanı sunar.
+
+---
+
+## CLI Komutları
+
+`exoproc` ikili dosyası terminal üzerinden zengin bir komut seti sunar:
+
+### `exoproc run <script.ts>`
+
+Önceden tanımlı genel değişkenlerle (`Java`, `print`, `mc`, `currentScreen`) hedef JVM üzerinde otomasyon betiklerini çalıştırır:
+
+```bash
+exoproc run ./my-automation.ts
+```
+
+### `exoproc attach <hedef>`
+
+PID veya yürütülebilir dosya/pencere adıyla çalışan bir Minecraft ya da Java sürecine bağlanır:
+
+```bash
+exoproc attach javaw.exe
+exoproc attach 14208
+```
+
+### `exoproc screenshot`
+
+Oyun penceresinin OpenGL arka belleğinden (framebuffer) anında ekran görüntüsü alır ve Kitty ya da ANSI sixel destekli terminallerde doğrudan ekrana çizer:
+
+```bash
+exoproc screenshot --save ./capture.png
+```
+
+### `exoproc status`
+
+Bağlantı durumunu, bellek kullanımını, hedef PID'yi ve aktif köprü modunu gösterir:
+
+```bash
+exoproc status
+```
+
+### `exoproc mcp`
+
+Yapay zeka kodlama asistanları (Claude Desktop, Antigravity, OpenCode) ile entegrasyon için standart girdi/çıktı üzerinden bir Model Context Protocol (MCP) sunucusu başlatır:
+
+```bash
+exoproc mcp
+```
+
+### `exoproc daemon`
+
+Arka plan servis köprüsünü başlatır (özellikle Linux / Wine ortamında kullanılır):
+
+```bash
+exoproc daemon --port 43370
+```
+
+---
+
+## Programatik İstemci: `ExoprocClient`
+
+`exoproc` kütüphanesini kendi Node.js veya Bun projelerinize doğrudan dahil edebilirsiniz:
+
+```typescript
+import { ExoprocClient } from 'exoproc';
+
+const client = new ExoprocClient({
+  baseUrl: 'http://127.0.0.1:43370',
+});
+
+// Sürece bağlan
+await client.attach({ pid: 12345 });
+
+// Ekran görüntüsü al
+const imageBuffer = await client.captureScreenshot();
+
+// Uzaktan betik çalıştır
+const result = await client.runScript({
+  code: 'return mc.thePlayer.getHealth();',
+});
+```

@@ -1,0 +1,29 @@
+---
+title: 'Windows x64 ABI ve NThread'
+description: "NThread, çağrının adresini bilmenin yanında Windows x64 çağrı sözleşmesine uygun bir register ve stack durumu kurmak zorundadır. Bu sayfa ABI'nin..."
+---
+
+NThread, çağrının adresini bilmenin yanında Windows x64 çağrı sözleşmesine uygun bir register ve stack durumu kurmak zorundadır. Bu sayfa ABI'nin genel kurallarını ve NThread'in bugün uyguladığı kısmı ayırır; desteklenmeyen imzaları destekleniyormuş gibi yorumlamayın.
+
+## İlk dört parametre pozisyoneldir
+
+Windows x64'te ilk dört parametrenin **pozisyonu** register slotunu belirler. Tamsayı/pointer slotları `RCX`, `RDX`, `R8`, `R9`; kayan nokta slotları aynı sıra numarasıyla `XMM0`–`XMM3` kullanır. Karışık imzada register numarası türden bağımsız olarak parametre konumudur: örneğin ikinci parametre `f64` ise `XMM1` slotundadır, `XMM0` değil.
+
+NThread, ilk dört parametrede türden `f32`/`f64` olarak normalize edilenleri ilgili `XMM` slotuna yazar; aynı float bitlerini karşılık gelen genel amaçlı register alanına da kopyalar. Bu, NThread'in somut çağrı kurulum davranışıdır; kullanıcı tarafında “tüm float'lar ayrı bir register dizisinden sayılır” varsayımı yapılmamalıdır.
+
+Beşinci ve sonraki parametreler stack slotlarına yazılır. Tamsayı/pointer dönüşü `RAX`'tan, `f32`/`f64` dönüşü `XMM0`'dan okunur.
+
+## Stack ve dönüş zinciri
+
+Çağrı sahibi 32 byte shadow space ayırır ve çağrı sınırındaki 16-byte hizalamayı korur. NThread yakaladığı thread'in özgün `RSP` değerinin altında bir çalışma alanı seçer; çağrı dönüşünü `add rsp, 0x28; ret` ve spin stub zinciriyle park noktasına geri getirir. Dörtten fazla argümanda, argüman sayısına uygun geçici bir `add rsp, 0x28 + N*8; ret` stub'ı kullanır.
+
+Bu düzenleme yalnızca NThread'in kurduğu çağrı için geçerlidir. Hedef fonksiyonun kendi ABI'si, varargs davranışı veya özel stack beklentisi farklıysa NThread bunu otomatik olarak düzeltemez.
+
+## Pratik sınırlar
+
+- İmzayı, özellikle parametre sırasını ve `f32`/`f64` ayrımını doğrulayın.
+- Varargs, struct-by-value, SIMD/vector türleri ve standart dışı calling convention'lar için önce küçük bir kontrollü test yazın.
+- Geri dönmeyen ya da uzun süre bloklanan fonksiyonlar park noktasına dönmez; NThread çağrısı için uygun değildir.
+- `expectedRsp` ayarlanmışsa NThread hem async `call()` hem `callSync()` dönüşünde gerçek `RSP` değerini denetler; uyarı, çağrının güvenle sürdürülebileceği anlamına gelmez.
+
+Çağrıyı önce argümansız veya basit tamsayı imzalı, yan etkisi düşük bir fonksiyonla doğrulamak en güvenli başlangıçtır. Çağrı akışının geri kalanı için [NThread yaşam döngüsüne](/docs/nthread/call-lifecycle) bakın.

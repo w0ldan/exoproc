@@ -1,0 +1,62 @@
+---
+title: Win64 Debugger
+description: 'VS Code tarzı interaktif debugger: Monaco disassembly, breakpoint yönetimi, adımlama, register/memory/call stack panelleri ve bellek tarayıcı'
+---
+
+Bu sayfa, [Exoproc IDE](/tr/ide/debugger)'nin **Run and Debug** görünümündeki debugger'ı anlatır: global Win64 makinesi içinde yeni bir process oluşturur, process'in thread'lerini listeler ve seçilen thread'e VS Code tarzı bir debugger bağlar.
+
+## Debugger'ı açma
+
+`/tr/ide/debugger` adresinde önce bir **process seçici** karşılar:
+
+- **Demo process başlat** ile yeni bir process açabilirsiniz.
+- **Bağlan**, debugger'ı seçilen process ve thread'e iliştirir ve URL'yi
+  `?pid=…&tid=…` yapar — paylaşılabilir bir bağlantı.
+- Kenar çubuğundaki process listesinden başka bir process/thread'e geçebilirsiniz.
+
+Process listesinin yanında o process'in **thread**'leri (durumlarıyla) ve
+yüklü **modülleri** (base + boyut) de listelenir.
+
+## Debugger özellikleri
+
+**Paneller sürüklenip yeniden düzenlenebilir** (gerçek VS Code docking):
+
+- Herhangi bir panelin sekmesini tutup başka bir gruba bırakarak taşıyabilir, bir panelin üzerine bırakarak sekme olarak birleştirebilir, grup kenarlarından yeniden boyutlandırabilirsiniz.
+- Bir grupta tek panel kalınca sekme başlığı otomatik gizlenir — tek dosya için isim göstermeye gerek yok.
+- Başlangıç düzeni: sol tarafta **DISASSEMBLY** (byte kolonu + Monaco tek panelde, birlikte taşınır), sağda **SIDEBAR** (Registers/Call Stack/Breakpoints), altta **MEMORY / TRACE / TARAYICI / TERMINAL** sekmeleri.
+
+**Disassembly paneli** (Monaco editor):
+
+- Assembly kodu Monaco code editor içinde gösterilir
+- Şu an yürütülen instruction sarı ok ve arka plan rengiyle vurgulanır
+- Gutter'a tıklayarak breakpoint ekleyip kaldırabilirsiniz (kırmızı daire)
+
+**Kontroller:**
+
+- **Continue** (`F5`): Bir breakpoint'e veya sonlandırma durumuna kadar çalıştırır
+- **Step Over** (`F10`): Tek instruction ilerler; `CALL` üzerindeyse fonksiyon çağrısını atlayarak döndükten sonra durur
+- **Step Into** (`F11`): Tek instruction ilerler (`CALL` dahil fonksiyon içine girer)
+- **Step Out** (`Shift+F11`): İçinde bulunulan frame kendi `ret`'ini çalıştırana kadar ilerler
+- **Run to Cursor** (`Ctrl+F10`): Seçili satıra kadar çalıştırır
+- **Breakpoint aç/kapat** (`F9`): Seçili satırda
+
+**Sağ panel:**
+
+- **Registers**: Thread'in canlı CPU context'i; son adımda değişen register'lar amber renkle vurgulanır. Değerler yerinde düzenlenebilir.
+- **Call Stack**: RSP'den yukarı doğru stack'te bulunan return adresleri, modül+offset etiketleriyle
+- **Breakpoints**: Aktif breakpoint listesi, tek tıkla kaldırma
+
+**Alt sekmeler:**
+
+- **MEMORY**: Seçilen mapping'in gerçek byte'ları, hex + ASCII görünümüyle; byte ve tipli değer yazma
+- **TRACE**: Çalışmış instruction geçmişi
+- **TARAYICI**: Cheat Engine mantığında bellek tarayıcı — bkz. [Bellek tarayıcı](/docs/playground/memory-scanner)
+- **TERMINAL**: [xterm.js](https://xtermjs.org) ile render edilen gerçek bir simüle `cmd.exe` oturumu — debug edilen process'ten bağımsız, aynı makinede ayrı bir process olarak çalışır. Bkz. [debugger component API](/docs/playground/debugger-component#terminal-paneli).
+
+## Gerçek simülasyon
+
+CPU state'i önceden yazılmış frame'lerden gelmez. Her adım RIP'teki x64 byte'ını çözer ve process belleğini gerçekten değiştirir. Breakpoint'ler `X64Cpu.breakpoints` kümesinde takip edilir ve Continue sırasında kontrol edilir.
+
+Yeni bir process açıldığında önceki process silinmez. Aynı global makinenin process tablosunda ayrı PID, address space, handle table ve thread context'leriyle yaşamaya devam eder.
+
+{/* TODO: en/playground/ altında İngilizce karşılığı henüz oluşturulmadı. */}

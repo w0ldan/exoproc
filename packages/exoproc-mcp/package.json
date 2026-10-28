@@ -1,0 +1,54 @@
+{
+  "name": "exoproc-mcp",
+  "version": "0.6.6",
+  "description": "Dedicated Model Context Protocol (MCP) server for native Windows x64 reverse engineering, thread hijacking, function hooking, memory inspection, and JVM analysis.",
+  "main": "./dist/index.js",
+  "bin": {
+    "exoproc-mcp": "dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "exoproc",
+    "mcp",
+    "reverse-engineering",
+    "hooking",
+    "thread-hijacking",
+    "memory",
+    "instrumentation",
+    "agent"
+  ],
+  "author": "Serkan",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^3.24.1",
+    "bun-winapi": "workspace:*",
+    "bun-xffi": "workspace:*",
+    "bun-minhook": "workspace:*",
+    "bun-nthread": "workspace:*",
+    "bun-njava": "workspace:*",
+    "bun-capstone": "workspace:*",
+    "win32-simulate": "workspace:*",
+    "exoproc-accessors": "workspace:*",
+    "exoproc-utils": "workspace:*"
+  }
+}

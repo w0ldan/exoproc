@@ -1,0 +1,12 @@
+---
+title: 'Hook lifecycle'
+description: 'create, enable, disable, and destroy are separate operations. NHook and MinHook share these names but do not share the same hit and cleanup behavior.'
+---
+
+`create`, `enable`, `disable`, and `destroy` are separate operations. NHook and MinHook share these names but do not share the same hit and cleanup behavior.
+
+`NHook.create()` decodes complete instructions covering at least two bytes and saves original bytes. `MinHook.create()` builds a trampoline without patching the target. Enable temporarily changes memory protection and restores it afterward. For a remote NHook target, accessible threads are suspended during patching except the NThread driving thread, whose separate suspend accounting must not be disturbed.
+
+An NHook `poll()` hit is not itself cleanup. `resume(hit)` either forces a return value or simulates supported displaced instructions and applies the next context. In the current flow, full accessor `deinit()` participates in releasing the parked thread and closing resources. Design ownership and cleanup explicitly, and use `try/finally`.
+
+`disable()` restores original target bytes. `destroy()` disables an enabled hook, removes it, and frees MinHook trampoline/relay resources. Test the shutdown path on a controlled target.

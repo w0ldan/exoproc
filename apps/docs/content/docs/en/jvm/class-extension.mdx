@@ -1,0 +1,113 @@
+---
+title: 'Class Extension & Bytecode Injection'
+description: 'Subclassing Java classes, implementing interfaces, and defining classes from bytecode using Java.extend(), Java.super(), and Java.defineClass().'
+---
+
+Exoproc does not merely invoke existing Java code; it allows you to **subclass Java classes**, implement **Java interfaces** directly in JavaScript, and dynamically inject new classes into the JVM at runtime.
+
+## Subclassing & Interfaces: `Java.extend()`
+
+The `Java.extend(parentClass, overrides)` function produces a dynamic subclass inheriting from the specified parent class or implementing the target interface:
+
+```typescript
+const Runnable = Java.type('java.lang.Runnable');
+
+// Define a subclass implementing the Runnable interface
+const CustomRunnableClass = Java.extend(Runnable, {
+  run: function () {
+    console.log('JavaScript callback executed from Runnable!');
+  },
+});
+
+// Instantiate the newly generated class
+const runnableInstance = new CustomRunnableClass();
+
+// Execute directly or pass to a Java thread pool
+runnableInstance.run();
+```
+
+### Hybrid Execution Architecture
+
+Exoproc uses a hybrid dispatch model for extended classes:
+
+1. **JavaScript -> Java Calls:** Overridden methods invoked from JavaScript execute locally in the JS runtime with zero JNI/IPC round-trip overhead.
+2. **Java -> JavaScript Calls:** When invoked from within the JVM (such as an event listener or game loop), the call is dispatched across the callback bridge to the registered JS handler.
+
+### Implementing Multiple Listener Methods
+
+```typescript
+const MouseListener = Java.type('java.awt.event.MouseListener');
+
+const MyListener = Java.extend(MouseListener, {
+  mouseClicked: (event) => {
+    console.log(`Click coordinates: ${event.getX()}, ${event.getY()}`);
+  },
+  mousePressed: (event) => {},
+  mouseReleased: (event) => {},
+  mouseEntered: (event) => {},
+  mouseExited: (event) => {},
+});
+```
+
+## Invoking Superclass Methods: `Java.super()`
+
+To call the original parent implementation of an overridden method, use `Java.super(instance)`:
+
+```typescript
+const ArrayList = Java.type('java.util.ArrayList');
+
+// Extend ArrayList and add logging around add()
+const LoggedListClass = Java.extend(ArrayList, {
+  add: function (element) {
+    console.log(`Adding item: ${element}`);
+
+    // Call original ArrayList.add() implementation
+    return Java.super(this).add(element);
+  },
+});
+
+const list = new LoggedListClass();
+list.add('Sample Item'); // Logs to console and inserts into Java list
+console.log(list.size()); // 1
+```
+
+Exoproc generates synthetic `__super_<method>` bridges on the class adapter to bypass virtual dispatch and directly invoke the parent implementation.
+
+## In-Memory Bytecode Injection: `Java.defineClass()`
+
+Pre-compiled Java bytecode (`Uint8Array` or `Buffer`) can be defined directly in the target JVM without writing `.class` files to disk:
+
+```typescript
+// rawBytecode: compiled .class file buffer
+const InjectedClass = Java.defineClass(
+  'com.example.InjectedClass',
+  rawBytecode,
+);
+
+const instance = new InjectedClass();
+instance.doWork();
+```
+
+### Runtime Java Compilation with ECJ
+
+Exoproc includes integrated **Eclipse Compiler for Java (ECJ)** and **Tiny-Remapper** toolchains. This allows compiling Java source strings on the fly and immediately injecting them into the target process:
+
+```typescript
+import { compileJavaSync } from 'bun-njava';
+
+const javaSource = `
+package com.example;
+public class FastMath {
+    public static int multiply(int a, int b) {
+        return a * b;
+    }
+}
+`;
+
+// Compile source code in-memory
+const compileResult = compileJavaSync({ source: javaSource });
+
+// Define directly in target JVM
+const FastMath = Java.defineClass(compileResult);
+console.log(FastMath.multiply(6, 7)); // 42
+```

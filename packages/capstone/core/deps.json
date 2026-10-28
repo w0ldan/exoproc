@@ -1,0 +1,13 @@
+{
+  "dependencies": [
+    {
+      "name": "Capstone 4.0.2 (Windows x64)",
+      "version": "4.0.2",
+      "url": "https://github.com/capstone-engine/capstone/releases/download/4.0.2/capstone-4.0.2-win64.zip",
+      "target": "deps/capstone.dll",
+      "extractFromZip": "capstone.dll",
+      "sha1": "c87eb26c07bb923b6a04da3cbc31b49f64c0c59a",
+      "sha256": "f03321188a1615d044314b1183dcd9a7ffda09286c31c369d109165d4892dcbb"
+    }
+  ]
+}

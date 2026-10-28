@@ -1,0 +1,20 @@
+---
+title: 'Kavram sözlüğü'
+description: '| Terim               | Açıklama                                                                                                  |'
+---
+
+| Terim               | Açıklama                                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| Accessor            | Bellek ve çağrı işlemlerini sağlayan ortak arayüz.                                                        |
+| ABI                 | Fonksiyon çağrısında register, stack, tür ve dönüş değerinin nasıl taşındığını belirleyen ikili sözleşme. |
+| CONTEXT             | Bir Windows thread'inin register ve kontrol durumunu tutan yapı.                                          |
+| Detour              | Hedef fonksiyon girişinden yönlendirilen alternatif kod yolu.                                             |
+| Driving thread      | Bir NThread accessor'ının uzaktaki işlemleri yürütmek için kullandığı park edilmiş thread.                |
+| Hook                | Fonksiyon girişini değiştirip kontrol akışını gözlemleme veya yönlendirme tekniği.                        |
+| Middleware accessor | Başka bir accessor'ın işlemlerini saran ve davranış ekleyen katman.                                       |
+| NThread             | Mevcut hedef thread'i yönlendirerek çağrı çalıştıran bileşen.                                             |
+| Relay               | 5 byte göreli jump'ın erişemediği detour'a ulaşmak için hedefe yakın ara jump stub'ı.                     |
+| Shadow space        | Windows x64'te çağrı yapanın ayırdığı 32 byte stack alanı.                                                |
+| Spin stub           | `EB FE` ile thread'i kendi üzerinde atlatıp park eden iki byte'lık talimat dizisi.                        |
+| Stub                | Başka bir modülde bulunan, küçük ve amaçlı talimat dizisi.                                                |
+| Trampoline          | Taşınmış özgün talimatları çalıştırıp hedef fonksiyonun patch sonrası kısmına dönen kod parçası.          |

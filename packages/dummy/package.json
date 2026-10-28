@@ -1,0 +1,50 @@
+{
+  "name": "exoproc-dummy",
+  "version": "0.6.4",
+  "description": "A single shared, long-lived dummy Windows process (default: ping.exe) other exoproc packages and tests spawn once and reuse as a lightweight cross-process target.",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "exoproc",
+    "windows",
+    "x64",
+    "native",
+    "cross-process",
+    "systems-instrumentation",
+    "testing"
+  ],
+  "author": "Serkan",
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  },
+  "dependencies": {
+    "bun-xffi": "workspace:*"
+  }
+}

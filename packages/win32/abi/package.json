@@ -1,0 +1,37 @@
+{
+  "name": "win32-abi",
+  "version": "0.6.4",
+  "description": "Runtime-neutral Win32 x64 DLL and function ABI manifests.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bun x tsc"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "license": "MIT",
+  "keywords": [
+    "win32",
+    "win64",
+    "abi",
+    "ffi",
+    "dll"
+  ]
+}

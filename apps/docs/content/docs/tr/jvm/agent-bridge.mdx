@@ -1,0 +1,118 @@
+---
+title: 'Ajan Köprüsü ile Saf JNI Köprüsü Karşılaştırması'
+description: 'Sıfır enjeksiyonlu JNI yansıması ile süreç içi yüksek hızlı Ajan RPC arasındaki mimari farklar ve iş parçacığı delegasyonu.'
+---
+
+Exoproc, hedef Java Sanal Makineleri (JVM) ile iletişim kurmak için iki farklı çalışma köprüsü sunar:
+
+1. **`ReflectionBridge` (Saf JNI):** Sıfır enjeksiyonlu, tamamen gizli ve `jvm.dll` VTable çağrıları üzerinden süreçler arası çalışan mimari.
+2. **`AgentReflectionBridge` (Süreç İçi Ajan):** JVM içerisinde çalışan gömülü HTTP/RPC sunucusuyla yüksek verim ve minimum gecikme sağlayan bellek içi ajan.
+
+```text
+                        ┌─────────────────────────────────┐
+                        │ TypeScript / Bun Otomasyonu     │
+                        └────────────────┬────────────────┘
+                                         │
+                 ┌───────────────────────┴───────────────────────┐
+                 ▼                                               ▼
+     ┌───────────────────────┐                       ┌───────────────────────┐
+     │   ReflectionBridge    │                       │  AgentReflectionBridge│
+     │       (Saf JNI)       │                       │   (Süreç İçi Ajan)    │
+     └───────────┬───────────┘                       └───────────┬───────────┘
+                 │ Süreçler Arası Bellek Yönlendirme             │ Yerel HTTP / İkili RPC
+                 ▼                                               ▼
+     ┌───────────────────────┐                       ┌───────────────────────┐
+     │  jvm.dll JNIEnv Tablosu                       │     Exoproc Ajanı     │
+     │   (VTable Çağrısı)    │                       │ (Bellekte defineClass)│
+     └───────────┬───────────┘                       └───────────┬───────────┘
+                 │                                               │
+                 └───────────────────────┬───────────────────────┘
+                                         ▼
+                            ┌─────────────────────────┐
+                            │    Hedef JVM Belleği    │
+                            │   (Minecraft / Oyun)    │
+                            └─────────────────────────┘
+```
+
+## Ayrıntılı Karşılaştırma
+
+| Kriter                        | ReflectionBridge (Saf JNI)                                             | AgentReflectionBridge (Ajan)                                                              |
+| ----------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Enjekte Edilen Kod**        | **Sıfır.** Ne bir DLL ne de diske yazılan bir JAR dosyası bulunur.     | **Bellek içi bayt dizisi.** `ClassLoader.defineClass` ile RAM'e yüklenir; diske yazılmaz. |
+| **Gizlilik ve Hile Koruması** | **Maksimum.** Hedef süreçte yabancı iş parçacığı veya modül yer almaz. | **Yüksek.** Diskte iz bırakmaz; standart Java iş parçacığı olarak çalışır.                |
+| **Çağrı Gecikmesi**           | Çağrı başına ~0.2 - 0.5 ms (Süreçler arası bellek iletişimi).          | Çağrı başına ~0.02 - 0.05 ms (Süreç içi doğrudan JNI / yerel döngü).                      |
+| **İşlem Kapasitesi**          | ~2.000 - 5.000 çağrı / sn.                                             | **50.000+ çağrı / sn.**                                                                   |
+| **İş Parçacığı Delegasyonu**  | `nthread` RIP yönlendirmesi gerektirir.                                | `Java.runOn(executor, fn)` ile doğal Java iş parçacığı zamanlaması.                       |
+| **En Uygun Alan**             | İlk keşif, gizli denetim, hile korumalı hedefler, seyrek otomasyonlar. | Gerçek zamanlı oyun otomasyonu, tik dinleyicileri, bot rotaları, sürekli durum döngüleri. |
+
+---
+
+## 1. Saf JNI: `ReflectionBridge`
+
+`ReflectionBridge`, hedef sürecin bellek alanında `jvm.dll` modülünü bulur, `JNI_GetCreatedJavaVMs` ile aktif `JavaVM` örneğini çözer ve süreçler arası iş parçacığı bağlamını bağlar:
+
+```typescript
+import { Process } from 'bun-winapi';
+import { RemoteCallableMemoryAccessor } from 'bun-xffi';
+import { attachJvm, createJavaContext } from 'bun-njava';
+
+const proc = Process.findByName('javaw.exe');
+const memory = new RemoteCallableMemoryAccessor(proc.pid);
+
+// Saf JNI köprüsünü bağla
+const bridge = await attachJvm(memory);
+const Java = createJavaContext(bridge);
+
+// Hedef JVM'yi değiştirmeden dilediğiniz alanı okuyun
+const Minecraft = Java.type('net.minecraft.client.Minecraft');
+console.log('Oyuncu adı:', Minecraft.getMinecraft().thePlayer.getName());
+```
+
+---
+
+## 2. Süreç İçi Ajan: `AgentBridge`
+
+Yüksek frekanslı işlemler gerektiğinde (örneğin her 50 milisaniyelik oyun tikinde yakındaki 200 varlığı taramak), `ReflectionBridge` dinamik olarak kendini `AgentBridge` seviyesine yükseltebilir:
+
+```typescript
+// Kesintisiz bellek içi geçiş
+const agentJava = await Java.transitionToAgent();
+
+// Tüm çağrılar artık yerel hızda çalışan süreç içi ajan üzerinden yapılır
+const entities = agentJava.type('net.minecraft.client.Minecraft').getMinecraft()
+  .theWorld.loadedEntityList;
+```
+
+### Disksiz Ajan Yükleme
+
+Ajan hiçbir zaman diske `.jar` dosyası olarak yazılmaz. Exoproc, `Exoproc.java` kodunu bellek üzerinde `buildAgentJar()` fonksiyonu ile derler ve paketler:
+
+```typescript
+import { buildAgentJar, loadAgent } from 'njava-agent';
+
+// RAM üzerinde JAR üret
+const agentBytes = await buildAgentJar();
+
+// Doğrudan hedef sürecin sistem sınıf yükleyicisine aktar
+await loadAgent(memory, agentBytes);
+```
+
+---
+
+## İş Parçacığı Delegasyonu: `Java.runOn()`
+
+Oyun otomasyonundaki en büyük zorluk iş parçacığı güvenliğidir (thread safety). Oyun durumunu (örneğin oyuncuyu zıplatmak, envanter ekranı açmak veya blok kırmak) harici bir asenkron iş parçacığından değiştirmek `ConcurrentModificationException` hatasına ya da oyunun çökmesine neden olur.
+
+`Java.runOn`, çalıştırılacak kodu doğrudan uygulamanın ana iş parçacığına (örneğin Minecraft'ın çizim veya tik döngüsüne) devreder:
+
+```typescript
+const Minecraft = Java.type('net.minecraft.client.Minecraft');
+const mc = Minecraft.getMinecraft();
+
+// Kodu doğrudan Minecraft ana iş parçacığı üzerinde güvenle çalıştır
+await Java.runOn(mc, () => {
+  // ConcurrentModificationException riski olmadan çalışır
+  mc.thePlayer.jump();
+  mc.thePlayer.sendChatMessage('/spawn');
+});
+```

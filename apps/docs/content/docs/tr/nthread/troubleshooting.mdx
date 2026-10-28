@@ -1,0 +1,35 @@
+---
+title: 'NThread sorun giderme'
+description: 'Bu sayfa hata mesajını belirti olarak ele alır. Amaç, hemen daha büyük timeout vermek değil, çağrının hangi aşamada bozulduğunu ayırmaktır.'
+---
+
+Bu sayfa hata mesajını belirti olarak ele alır. Amaç, hemen daha büyük timeout vermek değil, çağrının hangi aşamada bozulduğunu ayırmaktır.
+
+| Belirti               | Muhtemel neden                                        | İlk kontrol                                     |
+| --------------------- | ----------------------------------------------------- | ----------------------------------------------- |
+| `No*AddressError`     | Stub taraması tamamlanmadı veya uygun stub bulunamadı | Windows x64, modül erişimi ve init sırası       |
+| `CallTimeoutError`    | Fonksiyon dönmedi, yanlış ABI, thread kilitlendi      | Hedef adresi, imza, thread durumu, timeout      |
+| `CallThreadDiedError` | Thread sonlandı veya çağrı akışı thread'i bitirdi     | Exit code, çağrılan fonksiyonun dönüş davranışı |
+| RSP mismatch uyarısı  | Return chain veya stack argümanı hatası               | Argüman sayısı, shadow space, hizalama          |
+| Hook enable timeout   | Driving thread yanlışlıkla ayrıca suspend edildi      | NThread/accessor thread ID'si                   |
+| Hedef donuyor         | Park edilen thread lock veya UI döngüsü taşıyor       | Thread seçimi ve lock sahipliği                 |
+
+## Stub hataları
+
+NThread, `ntdll`, `kernel32` ve `kernelbase` içinde `EB FE`, `push reg; ret`, `jmp reg`, `ret` ve `add rsp, 0x28; ret` arar. Async başlatma bu taramanın bitmesini bekler. Hata devam ederse “başka bir stub adresi uydurmak” yerine platform, mimari ve modül haritalamasını kontrol edin.
+
+## Timeout
+
+Timeout, hedef fonksiyonun hatalı olduğu anlamına gelmez; thread'in spin stub'a dönmediği anlamına gelir. Önce çağrıyı mümkünse yerelde veya normal bir remote accessor ile doğrulayın. Ardından argümansız, hızlı bir Win32 fonksiyonuyla NThread zincirini izole edin. Sadece timeout değerini artırmak, deadlock'u uzun süre gizleyebilir.
+
+## Stack mismatch
+
+NThread, `expectedRsp` ayarlanmışsa hem `call()` hem `callSync()` sonrasında `RSP` denetimi yapar. Uyumsuzluk gördüğünüzde önce beşinci ve sonraki argümanları inceleyin. Bu çağrılar, stack slotlarını ve dinamik `add rsp, 0x28 + N*8; ret` stub'ını kullanır. Bir imza hatası, fonksiyonun kendi stack cleanup'ını bozmuş gibi görünebilir.
+
+## Minimum yeniden üretim
+
+1. Yeni başlatılmış, kendi kontrolünüzde bir hedef süreç kullanın.
+2. Tek thread veya gözlemlenebilir bir race kazananı seçin.
+3. Önce yan etkisiz ve hızlı çağrıyla accessor'ı doğrulayın.
+4. Bir seferde yalnızca adres, argüman türü veya hook türü gibi tek değişkeni değiştirin.
+5. Çökme varsa yeni süreç örneğiyle devam edin; bozulmuş context'i tekrar kullanmayın.

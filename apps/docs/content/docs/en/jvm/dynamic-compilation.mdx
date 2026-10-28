@@ -1,0 +1,138 @@
+---
+title: 'Dynamic ECJ Compilation'
+description: 'Zero-dependency, in-memory Java compilation directly from TypeScript using the embedded Eclipse Compiler for Java (ECJ).'
+---
+
+Exoproc features a built-in, zero-dependency Java compilation pipeline powered by the Eclipse Compiler for Java (ECJ). It allows compiling arbitrary Java source code strings into valid bytecode (`0xCAFEBABE`) on-the-fly directly inside TypeScript or JavaScript scripts—without requiring a JDK, Gradle, Maven, or an external javac installation.
+
+```text
+TypeScript / Bun Script
+       │
+       ▼
+compileJava({ source, javaVersion })
+       │
+       ├── ECJ 3.26.0 (Java 8 Target)
+       └── ECJ 3.46.100 (Java 17-25+ Target)
+       │
+       ▼
+In-Memory Bytecode Map
+Map<string, Uint8Array>
+  ├── "org.exoproc.injected.Task" ──► 0xCAFEBABE...
+  └── "org.exoproc.injected.Task$1"──► 0xCAFEBABE...
+```
+
+## Features
+
+- **No JDK Required:** Compiles Java source using bundled ECJ standalone JARs downloaded during installation (`bun run download-deps`).
+- **Multi-Version Targeting:**
+  - **ECJ 3.26.0:** Optimized for Java 8 targets (bytecodes 52 / 0x34), ideal for legacy Minecraft versions (1.8.9 - 1.12.2).
+  - **ECJ 3.46.100:** Full support for modern Java 17, 21, and preview Java 25 features.
+- **In-Memory & Diskless:** Bytecode is generated directly in memory or written directly to a specified directory.
+- **Multiple Classes & Nested Types:** Automatically detects and captures outer classes, static nested classes, and anonymous inner classes.
+- **AST & Metadata Extraction:** Parses package name, class name, imports, and fully-qualified class names (FQCN) without compiling.
+
+## Quick Example: `compileJava()`
+
+```typescript
+import { compileJava, getTestJavaPath } from 'bun-njava';
+
+const javaSource = `
+package org.exoproc.injected;
+
+public class FastTickHook implements Runnable {
+    private final String taskName;
+
+    public FastTickHook(String taskName) {
+        this.taskName = taskName;
+    }
+
+    @Override
+    public void run() {
+        System.out.println("[Hook] Executing task: " + this.taskName);
+    }
+}
+`;
+
+const result = await compileJava({
+  source: javaSource,
+  javaVersion: 8,
+  targetVersion: '-1.8',
+});
+
+if (result.success) {
+  console.log(`Main class: ${result.mainClass}`); // "org.exoproc.injected.FastTickHook"
+  const bytecode = result.classes.get('org.exoproc.injected.FastTickHook')!;
+  console.log(`Generated ${bytecode.length} bytes of valid bytecode.`);
+} else {
+  console.error('Compilation failed:', result.errors);
+}
+```
+
+## Synchronous Compilation: `compileJavaSync()`
+
+For CLI utilities, build steps, or initialization routines where asynchronous promises are inconvenient, `compileJavaSync` runs synchronously:
+
+```typescript
+import { compileJavaSync } from 'bun-njava';
+
+const result = compileJavaSync({
+  source: `
+    package org.exoproc.util;
+    public class MathUtil {
+        public static int add(int a, int b) { return a + b; }
+    }
+  `,
+  javaVersion: 17,
+});
+
+const bytecode = result.classes.get('org.exoproc.util.MathUtil')!;
+```
+
+## Inspecting Java AST: `extractClassInfo()`
+
+Before compilation, you can extract the package and class definitions from source code:
+
+```typescript
+import { extractClassInfo } from 'bun-njava';
+
+const info = extractClassInfo(`
+  package com.example.hook;
+  import java.util.List;
+
+  public class PlayerInterceptor {
+      // ...
+  }
+`);
+
+console.log(info.packageName); // "com.example.hook"
+console.log(info.className); // "PlayerInterceptor"
+console.log(info.fqcn); // "com.example.hook.PlayerInterceptor"
+```
+
+## Dynamic Bytecode Remapping with Tiny-Remapper
+
+When compiling code targeting obfuscated applications (such as vanilla Minecraft), your source code can be written with deobfuscated clean names and remapped to the target runtime's obfuscated names using the embedded Tiny-Remapper:
+
+```typescript
+import { remapJava } from 'exoproc-jjit';
+
+const remapped = await remapJava({
+  bytecode,
+  mappings: mappingPool, // Mojang / Intermediary / MCP
+  sourceNamespace: 'named',
+  targetNamespace: 'obfuscated',
+});
+
+// `remapped.bytecode` can now be injected into the live target process!
+```
+
+## Compilation Options
+
+| Option          | Type       | Description                                                                        |
+| --------------- | ---------- | ---------------------------------------------------------------------------------- |
+| `source`        | `string`   | The raw Java source code to compile.                                               |
+| `javaPath`      | `string`   | Path to the `java` binary to execute ECJ with.                                     |
+| `javaVersion`   | `number`   | Target major version (e.g. `8`, `17`, `21`). Defaults to detected runtime version. |
+| `targetVersion` | `string`   | Optional compiler compliance flag (e.g. `'-1.8'`, `'-17'`).                        |
+| `outputDir`     | `string`   | Optional path to write `.class` files to disk.                                     |
+| `classpath`     | `string[]` | Additional JARs or directories to include on the compilation classpath.            |

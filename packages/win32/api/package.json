@@ -1,0 +1,53 @@
+{
+  "name": "bun-winapi",
+  "version": "0.6.4",
+  "description": "Ergonomic Win32 process and memory management API for Bun.",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "exoproc",
+    "win32",
+    "native",
+    "windows",
+    "memory",
+    "process",
+    "64-bit"
+  ],
+  "author": "Serkan",
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  },
+  "dependencies": {
+    "bun-xffi": "workspace:*",
+    "exoproc-utils": "workspace:*"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {},
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"],
+  "references": [
+    {
+      "path": "../xffi"
+    },
+    {
+      "path": "../win32/api"
+    },
+    {
+      "path": "../nthread"
+    },
+    {
+      "path": "../nshm"
+    },
+    {
+      "path": "../java/njava"
+    },
+    {
+      "path": "../utils"
+    }
+  ]
+}

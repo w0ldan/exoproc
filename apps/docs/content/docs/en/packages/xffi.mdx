@@ -1,0 +1,18 @@
+---
+title: 'Using XFFI'
+description: 'bun-xffi is the type, memory, and call foundation for every functional Exoproc layer except shared utilities. The **x** means cross-process and...'
+---
+
+`bun-xffi` is the type, memory, and call foundation for every functional Exoproc layer except shared utilities. The **x** means cross-process and **ffi** is the C ABI surface. Struct layout, pointers, C functions, and `IMemoryAccessor` let local, remote, and NThread-backed operations use one model.
+
+```ts
+import { struct } from 'bun-xffi';
+
+const Vector3 = struct({ x: 'f32', y: 'f32', z: 'f32' });
+const vector = Vector3.allocSync();
+vector.x = 1;
+vector.y = 2.5;
+vector.z = -5;
+```
+
+The same struct definition can use an accessor for remote memory. Remote operations can be asynchronous, so examples should state which accessor they use. `cjitopen` compiles runtime C with TinyCC and `cimport` binds system exports, but a correct function signature remains the safety boundary.

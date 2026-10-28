@@ -1,0 +1,433 @@
+{
+  "version": "1.0.0",
+  "screens": {
+    "InGame": {
+      "description": "Active in-game gameplay world (no screen or HUD overlay)",
+      "aliases": ["ingame", "game", "world", "play", "oyun", "dunya", "dünya"],
+      "detectKeywords": [],
+      "transitions": [
+        {
+          "action": "escape",
+          "target": "GuiIngameMenu",
+          "description": "Pause game / open pause menu"
+        },
+        {
+          "action": "inventory",
+          "target": "GuiInventory",
+          "description": "Open player inventory"
+        },
+        {
+          "action": "chat",
+          "target": "GuiChat",
+          "description": "Open in-game chat"
+        },
+        {
+          "action": "closeScreen",
+          "target": "InGame",
+          "description": "Ensure no screen is open"
+        }
+      ]
+    },
+    "GuiIngameMenu": {
+      "description": "In-game pause menu",
+      "aliases": [
+        "pause",
+        "menu",
+        "esc",
+        "durdur",
+        "oyunmenusu",
+        "oyun menüsü",
+        "pausemenu"
+      ],
+      "detectKeywords": [
+        "back to game",
+        "save and quit to title",
+        "open to lan",
+        "advancements",
+        "statistics",
+        "oyuna dön"
+      ],
+      "transitions": [
+        { "button": "Back to Game", "target": "InGame" },
+        { "button": "Options...", "target": "GuiOptions" },
+        { "button": "Open to LAN", "target": "GuiShareToLan" },
+        { "button": "Achievements", "target": "GuiAchievements" },
+        { "button": "Statistics", "target": "GuiStats" },
+        { "button": "Save and Quit to Title", "target": "GuiMainMenu" },
+        { "action": "escape", "target": "InGame", "description": "Close menu" }
+      ]
+    },
+    "GuiMainMenu": {
+      "description": "Main title screen",
+      "aliases": [
+        "main",
+        "title",
+        "anamenu",
+        "ana menü",
+        "mainmenu",
+        "baslangic",
+        "başlangıç"
+      ],
+      "detectKeywords": [
+        "singleplayer",
+        "multiplayer",
+        "realms",
+        "tek oyunculu",
+        "çok oyunculu"
+      ],
+      "transitions": [
+        { "button": "Singleplayer", "target": "GuiSelectWorld" },
+        { "button": "Multiplayer", "target": "GuiMultiplayer" },
+        { "button": "Options...", "target": "GuiOptions" },
+        { "button": "Language...", "target": "GuiLanguage" },
+        { "button": "Quit Game", "target": "Exit" }
+      ]
+    },
+    "GuiSelectWorld": {
+      "description": "Singleplayer world selection menu",
+      "aliases": [
+        "singleplayer",
+        "single",
+        "worlds",
+        "tekil",
+        "tek oyunculu",
+        "dunyalar",
+        "dünyalar",
+        "selectworld"
+      ],
+      "detectKeywords": [
+        "play selected world",
+        "create new world",
+        "re-create",
+        "dünya seç"
+      ],
+      "transitions": [
+        { "button": "Create New World", "target": "GuiCreateWorld" },
+        { "button": "Play Selected World", "target": "InGame" },
+        { "button": "Cancel", "target": "GuiMainMenu" },
+        {
+          "action": "escape",
+          "target": "GuiMainMenu",
+          "description": "Return to main menu"
+        }
+      ]
+    },
+    "GuiCreateWorld": {
+      "description": "Create new singleplayer world menu",
+      "aliases": [
+        "createworld",
+        "newworld",
+        "yeni dunya",
+        "yeni dünya",
+        "dunya yarat"
+      ],
+      "detectKeywords": [
+        "create new world",
+        "game mode",
+        "more world options",
+        "yeni dünya yarat"
+      ],
+      "transitions": [
+        { "button": "Create New World", "target": "InGame" },
+        { "button": "Cancel", "target": "GuiSelectWorld" },
+        {
+          "action": "escape",
+          "target": "GuiSelectWorld",
+          "description": "Return to select world"
+        }
+      ]
+    },
+    "GuiOptions": {
+      "description": "Options / Settings menu",
+      "aliases": ["options", "settings", "ayarlar", "ayar"],
+      "detectKeywords": [
+        "music & sounds",
+        "video settings",
+        "controls",
+        "skin customization",
+        "resource packs",
+        "snooper settings",
+        "fov"
+      ],
+      "transitions": [
+        { "button": "Music & Sounds...", "target": "GuiScreenOptionsSounds" },
+        { "button": "Video Settings...", "target": "GuiVideoSettings" },
+        { "button": "Controls...", "target": "GuiControls" },
+        { "button": "Language...", "target": "GuiLanguage" },
+        { "button": "Chat Settings...", "target": "GuiScreenChatOptions" },
+        { "button": "Resource Packs...", "target": "GuiScreenResourcePacks" },
+        { "button": "Snooper Settings...", "target": "GuiScreenSnooper" },
+        { "button": "Skin Customization...", "target": "GuiCustomizeSkin" },
+        { "button": "Done", "target": "ParentScreen" },
+        { "action": "escape", "target": "ParentScreen", "description": "Done" }
+      ]
+    },
+    "GuiScreenOptionsSounds": {
+      "description": "Music and sound volume settings",
+      "aliases": [
+        "sounds",
+        "sound",
+        "music",
+        "audio",
+        "ses",
+        "muzik",
+        "müzik",
+        "sesler"
+      ],
+      "detectKeywords": [
+        "master volume",
+        "jukebox/noteblocks",
+        "weather",
+        "hostile creatures",
+        "friendly creatures",
+        "ambient/environment"
+      ],
+      "transitions": [
+        { "button": "Done", "target": "GuiOptions" },
+        { "action": "escape", "target": "GuiOptions", "description": "Done" }
+      ]
+    },
+    "GuiVideoSettings": {
+      "description": "Graphics, render distance, and video options",
+      "aliases": [
+        "video",
+        "videosettings",
+        "graphics",
+        "render",
+        "grafik",
+        "goruntu",
+        "görüntü",
+        "ekran"
+      ],
+      "detectKeywords": [
+        "graphics",
+        "render distance",
+        "max framerate",
+        "smooth lighting",
+        "clouds",
+        "view bobbing",
+        "gui scale"
+      ],
+      "transitions": [
+        { "button": "Done", "target": "GuiOptions" },
+        { "action": "escape", "target": "GuiOptions", "description": "Done" }
+      ]
+    },
+    "GuiControls": {
+      "description": "Keybindings and mouse controls configuration",
+      "aliases": [
+        "controls",
+        "control",
+        "keys",
+        "keybinds",
+        "tuslar",
+        "tuşlar",
+        "kontroller"
+      ],
+      "detectKeywords": [
+        "sensitivity",
+        "invert mouse",
+        "touchscreen",
+        "mouse settings",
+        "reset keys"
+      ],
+      "transitions": [
+        { "button": "Done", "target": "GuiOptions" },
+        { "action": "escape", "target": "GuiOptions", "description": "Done" }
+      ]
+    },
+    "GuiLanguage": {
+      "description": "Language selection screen",
+      "aliases": ["language", "lang", "dil", "diller"],
+      "detectKeywords": [
+        "language",
+        "dil",
+        "unicode font",
+        "force unicode font"
+      ],
+      "transitions": [
+        { "button": "Done", "target": "ParentScreen" },
+        { "action": "escape", "target": "ParentScreen", "description": "Done" }
+      ]
+    },
+    "GuiScreenChatOptions": {
+      "description": "Chat visibility, color, and scale options",
+      "aliases": [
+        "chatoptions",
+        "chatsettings",
+        "sohbet ayarları",
+        "sohbet ayarlari"
+      ],
+      "detectKeywords": [
+        "chat: shown",
+        "chat colors",
+        "web links",
+        "chat scale",
+        "focused height"
+      ],
+      "transitions": [
+        { "button": "Done", "target": "GuiOptions" },
+        { "action": "escape", "target": "GuiOptions", "description": "Done" }
+      ]
+    },
+    "GuiScreenResourcePacks": {
+      "description": "Available and selected resource packs",
+      "aliases": [
+        "resourcepacks",
+        "resources",
+        "texturepacks",
+        "textures",
+        "paketler",
+        "doku",
+        "doku paketleri"
+      ],
+      "detectKeywords": [
+        "open resource pack folder",
+        "available resource packs",
+        "selected resource packs"
+      ],
+      "transitions": [
+        { "button": "Done", "target": "GuiOptions" },
+        { "action": "escape", "target": "GuiOptions", "description": "Done" }
+      ]
+    },
+    "GuiScreenSnooper": {
+      "description": "Machine snooper and telemetry options",
+      "aliases": ["snooper", "telemetry"],
+      "detectKeywords": ["allow snooper", "send snooper data", "snooper"],
+      "transitions": [
+        { "button": "Done", "target": "GuiOptions" },
+        { "action": "escape", "target": "GuiOptions", "description": "Done" }
+      ]
+    },
+    "GuiCustomizeSkin": {
+      "description": "Cape, jacket, sleeves, and pants skin layers",
+      "aliases": [
+        "skin",
+        "skins",
+        "customizeskin",
+        "kostum",
+        "kostüm",
+        "pelerin",
+        "cape"
+      ],
+      "detectKeywords": [
+        "cape",
+        "jacket",
+        "left sleeve",
+        "right sleeve",
+        "left pants leg",
+        "right pants leg",
+        "hat"
+      ],
+      "transitions": [
+        { "button": "Done", "target": "GuiOptions" },
+        { "action": "escape", "target": "GuiOptions", "description": "Done" }
+      ]
+    },
+    "GuiGameOver": {
+      "description": "Player death / respawn screen",
+      "aliases": ["death", "gameover", "olum", "ölüm"],
+      "detectKeywords": ["respawn", "title menu"],
+      "transitions": [
+        { "button": "Respawn", "target": "InGame" },
+        { "button": "Title menu", "target": "GuiMainMenu" }
+      ]
+    },
+    "GuiShareToLan": {
+      "description": "Open singleplayer world to LAN",
+      "aliases": ["lan", "yerel", "yerelag", "yerel ağ"],
+      "detectKeywords": [
+        "start lan world",
+        "game mode for other players",
+        "allow cheats"
+      ],
+      "transitions": [
+        { "button": "Start LAN World", "target": "InGame" },
+        { "button": "Cancel", "target": "GuiIngameMenu" },
+        {
+          "action": "escape",
+          "target": "GuiIngameMenu",
+          "description": "Cancel"
+        }
+      ]
+    },
+    "GuiMultiplayer": {
+      "description": "Server browser and multiplayer lobby",
+      "aliases": [
+        "multiplayer",
+        "multi",
+        "servers",
+        "cok oyunculu",
+        "çok oyunculu",
+        "sunucular"
+      ],
+      "detectKeywords": [
+        "direct connect",
+        "add server",
+        "join server",
+        "refresh"
+      ],
+      "transitions": [
+        { "button": "Join Server", "target": "InGame" },
+        { "button": "Cancel", "target": "GuiMainMenu" },
+        { "action": "escape", "target": "GuiMainMenu", "description": "Cancel" }
+      ]
+    },
+    "GuiDisconnected": {
+      "description": "Disconnected from server screen",
+      "aliases": ["disconnected", "baglanti kesildi"],
+      "detectKeywords": ["back to server list"],
+      "transitions": [
+        { "button": "Back to server list", "target": "GuiMultiplayer" }
+      ]
+    },
+    "GuiInventory": {
+      "description": "Player survival inventory / crafting 2x2",
+      "aliases": ["inventory", "inv", "envanter"],
+      "detectKeywords": ["crafting"],
+      "transitions": [
+        {
+          "action": "escape",
+          "target": "InGame",
+          "description": "Close inventory"
+        },
+        {
+          "action": "closeScreen",
+          "target": "InGame",
+          "description": "Close inventory"
+        }
+      ]
+    },
+    "GuiChat": {
+      "description": "In-game chat entry line",
+      "aliases": ["chat", "sohbet"],
+      "detectKeywords": [],
+      "transitions": [
+        { "action": "escape", "target": "InGame", "description": "Close chat" },
+        {
+          "action": "closeScreen",
+          "target": "InGame",
+          "description": "Close chat"
+        }
+      ]
+    },
+    "GuiContainer": {
+      "description": "Generic container (Chest, Furnace, Crafting Table, Hopper, Dispenser)",
+      "aliases": ["container", "chest", "sandik", "sandık"],
+      "detectKeywords": [],
+      "transitions": [
+        {
+          "action": "escape",
+          "target": "InGame",
+          "description": "Close container"
+        },
+        {
+          "action": "closeScreen",
+          "target": "InGame",
+          "description": "Close container"
+        }
+      ]
+    }
+  }
+}

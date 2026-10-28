@@ -1,0 +1,47 @@
+{
+  "name": "bun-capstone-abi",
+  "version": "0.6.4",
+  "description": "Side-effect-free Capstone/x86 ABI constant tables (cs_arch, cs_err, x86_reg, x86_insn, ...) shared between bun-capstone's native binding and @exoproc/simulate's guest capstone.dll -- no bun:ffi/native loader dependency.",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./def": {
+      "types": "./dist/capstone-def.d.ts",
+      "import": "./dist/capstone-def.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "capstone",
+    "disassembler",
+    "x86",
+    "x86_64",
+    "abi",
+    "exoproc"
+  ],
+  "author": "Serkan",
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  },
+  "dependencies": {
+    "bun-xffi": "workspace:*"
+  }
+}

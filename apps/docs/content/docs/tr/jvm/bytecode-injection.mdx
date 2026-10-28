@@ -1,0 +1,142 @@
+---
+title: 'Bayt Kodu Tanımlama & Sınıf Enjeksiyonu'
+description: 'Derlenmiş Java bayt kodlarını gizli Unsafe, standart ClassLoader veya yüksek hızlı Ajan stratejileriyle canlı JVM belleğine enjekte etme.'
+---
+
+Bayt kodu dinamik derleyiciyle oluşturulduktan sonra, Exoproc `njava-runtime` paketindeki **`ClassDefiner`** ve **`ClassLoader`** mimarisi sayesinde bu sınıfları uygulamayı yeniden başlatmadan veya diske dosya kaydetmeden canlı hedef JVM sürecine doğrudan enjekte eder.
+
+```text
+Derlenmiş Bayt Kodu (Uint8Array)
+               │
+               ▼
+      Java.defineClass()
+               │
+   ┌───────────┴───────────┐
+   ▼                       ▼
+Auto / Unsafe         Agent / ClassLoader
+Stratejisi            Stratejisi
+   │                       │
+sun.misc.Unsafe       java.lang.ClassLoader
+defineClass()         defineClass()
+   │                       │
+   └───────────┬───────────┘
+               ▼
+       Canlı Hedef JVM
+   Java.type() ile Erişilebilir
+```
+
+## Dört Temel Enjeksiyon Stratejisi
+
+Exoproc, ClassLoader yapılarını birinci sınıf JavaScript nesneleri olarak modeller ve dört özel enjeksiyon stratejisi sunar:
+
+| Strateji          | Motor                         | Gizlilik     | Kullanım Alanı                                                              |
+| ----------------- | ----------------------------- | ------------ | --------------------------------------------------------------------------- |
+| **`auto`**        | Otomatik yedekleme çözücü     | Yüksek       | Varsayılan mod; mevcut en uygun stratejiyi seçer.                           |
+| **`unsafe`**      | `sun.misc.Unsafe.defineClass` | En Üst Düzey | Tamamen gizli; ClassLoader kayıt kilitlerini atlar.                         |
+| **`classLoader`** | `ClassLoader.defineClass`     | Orta         | Standart JVM yansıması; `LaunchClassLoader` veya `AppClassLoader` hedefler. |
+| **`agent`**       | Süreç içi `njava-agent`       | Yüksek Hız   | Ajan aktifken toplu ve çok hızlı enjeksiyon sağlar.                         |
+
+---
+
+### 1. `UnsafeClassLoader` (Gizli Mod)
+
+`UnsafeClassLoader`, `sun.misc.Unsafe` sınıfındaki gizli `theUnsafe` örneğini yakalar ve `defineClass` metodunu doğrudan çağırır:
+
+```typescript
+import { ClassLoader } from 'njava-runtime';
+
+// Unsafe tanımlayıcı oluştur
+const unsafeDefiner = ClassLoader.unsafe(javaContext);
+
+// Sınıfı standart ClassLoader hiyerarşisine kaydetmeden enjekte eder
+const InjectedClass = unsafeDefiner.define({
+  className: 'org.exoproc.stealth.Payload',
+  bytecode: myBytecodeBuffer,
+});
+
+// Anında örnek oluştur veya statik metotları çalıştır
+const payload = InjectedClass.newInstance();
+```
+
+- **Neden önemli:** Hile koruma yazılımları ve bütünlük denetleyicileri genellikle `ClassLoader.loadClass` metodunu izler veya sınıf önbelleklerini kontrol eder. `Unsafe.defineClass` bu kancaların hiçbirine takılmaz.
+
+---
+
+### 2. Standart `ClassLoader` (LaunchClassLoader / AppClassLoader)
+
+Enjekte edilen sınıfların oyundaki mevcut diğer sınıflar (örneğin kayıtlı olay işleyicileri, Minecraft Forge modları veya Fabric mixin'leri) tarafından bulunabilmesi gerekiyorsa, oyunun ana `ClassLoader` yapısına tanımlanmalıdır:
+
+```typescript
+import { ClassLoader } from 'njava-runtime';
+
+// İş parçacığı bağlam sınıf yükleyicisini al (örn. LaunchClassLoader)
+const contextLoader = ClassLoader.getContextClassLoader(javaContext);
+
+// Oyunun sınıf yükleyicisine tanımla
+contextLoader.defineClass(
+  'org.exoproc.injected.CustomGuiScreen',
+  myBytecodeBuffer,
+);
+
+// Artık oyun içi kodlar Class.forName() ile bu sınıfı bulabilir
+const ScreenClass = Java.type('org.exoproc.injected.CustomGuiScreen');
+```
+
+---
+
+### 3. Yüksek Hızlı `AgentClassLoader`
+
+`njava-agent` bağlıyken bayt kodu enjeksiyonu doğrudan süreç içi ajan üzerinden yüksek hızda gerçekleştirilir:
+
+```typescript
+import { ClassLoader } from 'njava-runtime';
+
+const agentLoader = ClassLoader.agent(javaContext);
+const HookClass = agentLoader.defineClass(
+  'org.exoproc.agent.TickListener',
+  myBytecodeBuffer,
+);
+```
+
+---
+
+## Pratik Kullanım: `Java.defineClass()`
+
+`JavaContext` üzerinde çalışan otomasyon betiklerinde `Java.defineClass` doğrudan kullanılabilir:
+
+```typescript
+// Tek akışta derleme ve enjeksiyon
+const result = await Java.compile(`
+  package org.exoproc.test;
+
+  public class Greeting {
+      public static String message() {
+          return "Enjekte Edilen JVM Belleğinden Merhaba!";
+      }
+  }
+`);
+
+// Hedef JVM'ye tanımla
+const GreetingClass = Java.defineClass(
+  'org.exoproc.test.Greeting',
+  result.classes.get('org.exoproc.test.Greeting')!,
+);
+
+console.log(GreetingClass.message()); // "Enjekte Edilen JVM Belleğinden Merhaba!"
+```
+
+## Bellek İçi JAR Paketleme: `buildJarBuffer()`
+
+Enjekte edilen sınıflar birden çok bağımlılık, kaynak veya iç sınıf içeriyorsa, bunlar RAM üzerinde dinamik bir JAR dosyası halinde paketlenebilir:
+
+```typescript
+import { buildJarBuffer } from 'exoproc-jjit';
+
+const jarBuffer = await buildJarBuffer([
+  { path: 'META-INF/MANIFEST.MF', content: 'Manifest-Version: 1.0\n' },
+  { path: 'org/exoproc/Task.class', content: taskBytecode },
+  { path: 'org/exoproc/Task$1.class', content: taskInnerBytecode },
+]);
+
+// Tüm JAR'ı hedef ClassLoader içerisine aktarın
+```
