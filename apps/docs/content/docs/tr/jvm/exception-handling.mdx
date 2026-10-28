@@ -1,0 +1,86 @@
+---
+title: 'İstisna Yönetimi ve Hata Ayrıştırma'
+description: 'Java istisnalarının (Throwable) otomatik çözümlenmesi (unwrapping), InvocationTargetException zincirleri ve standart try/catch entegrasyonu.'
+---
+
+Java ortamında fırlatılan bir istisna (exception) ile JavaScript çalışma zamanı arasında doğal bir köprü kurmak kritik öneme sahiptir. Exoproc, JVM istisnalarını otomatik olarak yakalar, iç içe geçmiş yansıma sarmalayıcılarını çözer ve standart JavaScript `Error` nesnelerine dönüştürür.
+
+## Otomatik İstisna Çözümleme (Exception Unwrapping)
+
+JNI üzerinden yansıma (`Method.invoke` veya `Constructor.newInstance`) çağrıldığında, fırlatılan herhangi bir istisna JVM tarafından bir `java.lang.reflect.InvocationTargetException` (ITE) içine hapsedilir.
+
+Exoproc'un `checkAndUnwrapException` mekanizması bu süreci otomatik yönetir:
+
+```text
+JVM İçinde Hata: NullPointerException
+         │
+    Sarmalanır: InvocationTargetException
+         │
+    JNI Yakalama: ExceptionOccurred()
+         │
+    Temizleme: ExceptionClear() (JVM durumu bozulmaz)
+         │
+    Kök Neden Çözümleme: Throwable.getCause() döngüsü
+         │
+    JavaScript: ReflectiveInvokeError ("NullPointerException: target is null")
+```
+
+1. **Anında Temizleme (`ExceptionClear`):** Bekleyen istisna JVM durumunu kilitlemeden hemen temizlenir; böylece sonraki JNI çağrıları güvenle devam edebilir.
+2. **Kök Neden Taraması:** `getCause()` zinciri sonuna kadar taranarak asıl fırlatılan hata nesnesine ulaşılır.
+3. **Anlamlı Mesaj Çıkarma:** Hatanın Java sınıf adı ve `getMessage()` çıktısı okunarak anlamlı bir hata mesajı oluşturulur.
+
+## Standart `try / catch` Kullanımı
+
+Geliştiriciler, Java çağrıları sırasında fırlatılan hataları alışık oldukları standart TypeScript `try / catch` blokları ile yakalayabilir:
+
+```typescript
+const Integer = Java.type('java.lang.Integer');
+
+try {
+  // Geçersiz bir sayı ayrıştırmaya çalış (Java NumberFormatException fırlatır)
+  const sayi = Integer.parseInt('gecersiz_sayi');
+} catch (err: any) {
+  console.error('Yakalanan Hata:', err.message);
+  // Çıktı: Reflective invocation threw: java.lang.NumberFormatException: For input string: "gecersiz_sayi"
+}
+```
+
+## Hata Sınıfları Hiyerarşisi (`NJavaError`)
+
+Exoproc, JVM katmanında oluşabilecek sorunlar için özel hata sınıfları tanımlar. Hepsi temel `NJavaError` sınıfından türer:
+
+| Hata Sınıfı                | Fırlatılma Nedeni                                                                         |
+| -------------------------- | ----------------------------------------------------------------------------------------- |
+| `JvmModuleNotFoundError`   | Hedef sürecin modül listesinde `jvm.dll` bulunamadığında                                  |
+| `JvmGetCreatedVmError`     | `JNI_GetCreatedJavaVMs` çağrısı başarısız olduğunda veya hiç sanal makine bulunamadığında |
+| `JvmGetEnvError`           | Hedef thread için `JavaVM::GetEnv` çağrısı hata döndürdüğünde                             |
+| `ClassNotFoundError`       | Talep edilen Java sınıfı `Class.forName` veya ClassLoader tarafından bulunamadığında      |
+| `MethodNotFoundError`      | Sınıfta istenen isim ve imzada bir metod bulunamadığında                                  |
+| `FieldNotFoundError`       | Sınıfta aranan isimde bir alan (field) mevcut olmadığında                                 |
+| `ConstructorNotFoundError` | Verilen parametrelere uygun bir yapıcı bulunamadığında                                    |
+| `ReflectiveInvokeError`    | Çağrılan Java metodu bir istisna fırlattığında                                            |
+
+### Hedef Süreç Denetimi Örneği
+
+```typescript
+import {
+  ClassNotFoundError,
+  MethodNotFoundError,
+  ReflectiveInvokeError,
+} from 'bun-njava';
+
+try {
+  const Player = Java.type('net.minecraft.entity.player.EntityPlayer');
+  Player.bilinmeyenMetod();
+} catch (err) {
+  if (err instanceof ClassNotFoundError) {
+    console.error(`Sınıf bulunamadı: ${err.className}`);
+  } else if (err instanceof MethodNotFoundError) {
+    console.error(`Metod eksik: ${err.methodName}`);
+  } else if (err instanceof ReflectiveInvokeError) {
+    console.error(`Java tarafında hata: ${err.aoString}`);
+  } else {
+    throw err;
+  }
+}
+```

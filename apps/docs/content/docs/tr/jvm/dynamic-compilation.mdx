@@ -1,0 +1,138 @@
+---
+title: 'Dinamik ECJ Derleme'
+description: 'Gömülü Eclipse Compiler for Java (ECJ) sayesinde TypeScript içinden doğrudan sıfır bağımlılıklı, bellekte Java derleme.'
+---
+
+Exoproc, Eclipse Compiler for Java (ECJ) tarafından desteklenen yerleşik, sıfır harici bağımlılıklı bir Java derleme altyapısına sahiptir. Bu mimari sayesinde harici bir JDK, Gradle, Maven veya kurulu bir javac derleyicisine ihtiyaç duymadan, doğrudan TypeScript veya JavaScript betikleri içinden rastgele Java kaynak kodları anında geçerli bayt kodlarına (`0xCAFEBABE`) dönüştürülebilir.
+
+```text
+TypeScript / Bun Betiği
+       │
+       ▼
+compileJava({ source, javaVersion })
+       │
+       ├── ECJ 3.26.0 (Java 8 Hedefi)
+       └── ECJ 3.46.100 (Java 17-25+ Hedefi)
+       │
+       ▼
+Bellek İçi Bayt Kodu Haritası
+Map<string, Uint8Array>
+  ├── "org.exoproc.injected.Task" ──► 0xCAFEBABE...
+  └── "org.exoproc.injected.Task$1"──► 0xCAFEBABE...
+```
+
+## Temel Özellikler
+
+- **JDK Gerektirmez:** Kurulum sırasında indirilen (`bun run download-deps`) gömülü ECJ bağımsız JAR dosyalarıyla doğrudan çalışır.
+- **Çoklu Sürüm Desteği:**
+  - **ECJ 3.26.0:** Java 8 hedefleri (bayt kodu 52 / 0x34) için optimize edilmiştir; eski Minecraft sürümleri (1.8.9 - 1.12.2) için idealdir.
+  - **ECJ 3.46.100:** Modern Java 17, 21 ve önizleme Java 25 özelliklerini eksiksiz destekler.
+- **Bellek İçi ve Disksiz:** Bayt kodu doğrudan RAM üzerinde üretilir; diske dosya yazma zorunluluğu yoktur.
+- **İç İçe Sınıflar ve Anonim Tipler:** Dış sınıfları, statik iç sınıfları ve anonim `Runnable` gibi tipleri otomatik olarak ayrıştırıp yakalar.
+- **AST ve Üstveri Ayrıştırma:** Derleme yapmadan önce paket adını, sınıf adını ve tam sınıf yolunu (FQCN) hızla analiz eder.
+
+## Hızlı Başlangıç: `compileJava()`
+
+```typescript
+import { compileJava } from 'bun-njava';
+
+const javaSource = `
+package org.exoproc.injected;
+
+public class FastTickHook implements Runnable {
+    private final String taskName;
+
+    public FastTickHook(String taskName) {
+        this.taskName = taskName;
+    }
+
+    @Override
+    public void run() {
+        System.out.println("[Kanca] Görev çalıştırılıyor: " + this.taskName);
+    }
+}
+`;
+
+const result = await compileJava({
+  source: javaSource,
+  javaVersion: 8,
+  targetVersion: '-1.8',
+});
+
+if (result.success) {
+  console.log(`Ana sınıf: ${result.mainClass}`); // "org.exoproc.injected.FastTickHook"
+  const bytecode = result.classes.get('org.exoproc.injected.FastTickHook')!;
+  console.log(`${bytecode.length} bayt geçerli bayt kodu üretildi.`);
+} else {
+  console.error('Derleme başarısız oldu:', result.errors);
+}
+```
+
+## Senkron Derleme: `compileJavaSync()`
+
+CLI araçları, derleme adımları veya asenkron `await` yapısının uygun olmadığı başlangıç rutinleri için `compileJavaSync` senkron olarak çalışır:
+
+```typescript
+import { compileJavaSync } from 'bun-njava';
+
+const result = compileJavaSync({
+  source: `
+    package org.exoproc.util;
+    public class MathUtil {
+        public static int add(int a, int b) { return a + b; }
+    }
+  `,
+  javaVersion: 17,
+});
+
+const bytecode = result.classes.get('org.exoproc.util.MathUtil')!;
+```
+
+## Java AST Analizi: `extractClassInfo()`
+
+Derleme işleminden önce kaynak koddan paket ve sınıf üstverilerini ayıklayabilirsiniz:
+
+```typescript
+import { extractClassInfo } from 'bun-njava';
+
+const info = extractClassInfo(`
+  package com.example.hook;
+  import java.util.List;
+
+  public class PlayerInterceptor {
+      // ...
+  }
+`);
+
+console.log(info.packageName); // "com.example.hook"
+console.log(info.className); // "PlayerInterceptor"
+console.log(info.fqcn); // "com.example.hook.PlayerInterceptor"
+```
+
+## Tiny-Remapper ile Dinamik Bayt Kodu Yeniden Haritalama
+
+Hedef uygulamanın (örneğin vanilla Minecraft) karartılmış (obfuscated) koduna yönelik derleme yaparken, kaynak kodunuzu anlaşılır isimlerle yazıp gömülü Tiny-Remapper ile hedef isim uzayına dönüştürebilirsiniz:
+
+```typescript
+import { remapJava } from 'exoproc-jjit';
+
+const remapped = await remapJava({
+  bytecode,
+  mappings: mappingPool, // Mojang / Intermediary / MCP
+  sourceNamespace: 'named',
+  targetNamespace: 'obfuscated',
+});
+
+// `remapped.bytecode` artık çalışan hedef sürece doğrudan enjekte edilebilir!
+```
+
+## Derleme Parametreleri
+
+| Seçenek         | Tip        | Açıklama                                                              |
+| --------------- | ---------- | --------------------------------------------------------------------- |
+| `source`        | `string`   | Derlenecek ham Java kaynak kodu.                                      |
+| `javaPath`      | `string`   | ECJ çalıştırılırken kullanılacak `java` ikilisinin yolu.              |
+| `javaVersion`   | `number`   | Hedef Java ana sürümü (örneğin `8`, `17`, `21`).                      |
+| `targetVersion` | `string`   | İsteğe bağlı derleyici uyumluluk bayrağı (örneğin `'-1.8'`, `'-17'`). |
+| `outputDir`     | `string`   | Sınıf dosyalarının diske yazılacağı isteğe bağlı dizin.               |
+| `classpath`     | `string[]` | Derleme yoluna eklenecek harici JAR veya dizin listesi.               |

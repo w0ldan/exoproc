@@ -1,0 +1,20 @@
+---
+title: 'Accessor chain'
+description: 'An accessor presents the same read, write, alloc, free, protect, scan, and call operations through different memory-access strategies. It keeps...'
+---
+
+An accessor presents the same `read`, `write`, `alloc`, `free`, `protect`, `scan`, and `call` operations through different memory-access strategies. It keeps local-versus-remote decisions out of structs and higher-level features.
+
+```text
+Struct / CFunction
+        │
+IMemoryAccessor
+        │
+Middleware
+        │
+Local API | Remote API | NThread redirection
+```
+
+`IndirectNThreadHostAccessor` uses NThread as its call executor and layers indirect call redirection, a machine-code pool, memset/memcmp transfer, file transfer, scanning, and ABI marshalling on top.
+
+Its lifecycle matters. `createAccessor()` waits for `init()` and returns a ready chain. If you construct `IndirectNThreadHostAccessor` directly, await `init()` before use; do not assume that a generic accessor exposes a `whenReady()` method. When debugging, identify the layer that actually executed the operation before diagnosing a timeout or ABI symptom.

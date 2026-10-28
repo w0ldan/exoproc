@@ -1,0 +1,10 @@
+---
+title: 'Failure modes and debugging'
+description: 'Cross-process context and stack mistakes often appear as target-process access violations rather than host exceptions. NThread reserves a full...'
+---
+
+Cross-process context and stack mistakes often appear as target-process access violations rather than host exceptions. NThread reserves a full page below captured `RSP` (`STACK_ADD = -4096`) because smaller slack can leave stale dispatch addresses in ordinary stack use.
+
+Wrong argument types, counts, float representation, or return types can make the target dereference invalid data. Blocking calls, `ExitThread`, and loops prevent a return to the spin stub. Suspending a thread that holds a mutex or loader lock can freeze the target. If a `No*AddressError` persists, verify Windows x64, system modules, and stub-scan readiness.
+
+Debug in order: verify target address, architecture, and signature; compare `RIP`, `RSP`, and argument registers; inspect stack arguments and exit state; then reproduce with a short side-effect-free call in a new target process.

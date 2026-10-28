@@ -1,0 +1,94 @@
+---
+title: 'JVM Architecture & Overview'
+description: "Exoproc's JVM reverse engineering and runtime reflection layer: JNI bridge, Agent RPC, JavaContext, and stealth instrumentation."
+---
+
+Exoproc provides a comprehensive runtime instrumentation and reflection suite (`bun-njava`, `njava-agent`, `njava-runtime`) for inspecting, managing, and reverse-engineering Java Virtual Machines (JVMs) inside live Windows processes directly from TypeScript and JavaScript.
+
+Using this layer, you can interact with classes, objects, fields, and methods without injecting external DLLs or writing `.jar` agent files to disk.
+
+```text
+TypeScript / Bun (Automation or Scripts)
+                    │
+               JavaContext
+         (Nashorn / GraalJS API)
+                    │
+     ┌──────────────┴──────────────┐
+     ▼                             ▼
+ReflectionBridge              AgentReflectionBridge
+(Zero-Injection / JNI)        (In-Process njava-agent)
+     │                             │
+Raw Memory & VTable Calls      High-Throughput HTTP RPC
+     │                             │
+     └──────────────┬──────────────┘
+                    ▼
+          Target JVM (jvm.dll)
+       (Minecraft / Java Process)
+```
+
+## Two Core Bridge Models
+
+Exoproc offers two distinct bridge architectures tailored to target security constraints and performance requirements:
+
+| Feature                  | ReflectionBridge (Pure JNI)                               | AgentReflectionBridge (In-Process Agent)                     |
+| ------------------------ | --------------------------------------------------------- | ------------------------------------------------------------ |
+| **Injection**            | Zero injection (no DLL, no JAR on disk)                   | In-memory bytecode injection (`defineClass`)                 |
+| **Stealth**              | Complete stealth; no foreign threads or modules in target | In-process HTTP/RPC server inside target                     |
+| **Execution Model**      | Direct `JNIEnv` vtable calls via `jvm.dll`                | High-speed JSON/Binary RPC over local loopback               |
+| **Performance**          | Ideal for inspection, telemetry, and discrete tasks       | Optimized for high-frequency loops and tick handlers         |
+| **Special Capabilities** | JNI vtable marshalling, remote handle management          | `Java.runOn` thread delegation, runtime bytecode compilation |
+
+### 1. ReflectionBridge (Pure JNI)
+
+`ReflectionBridge` locates the `jvm.dll` module in the target process memory, resolves `JNI_GetCreatedJavaVMs`, and invokes `JNIEnv` vtable functions cross-process.
+
+- Does not create remote threads (`CreateRemoteThread` is avoided).
+- Bypasses standard `FindClass` loader restrictions by bootstrapping through `java.lang.Class.forName` and the system class loader.
+- Perfect for targets protected by integrity checks or anti-cheat where any injected module or foreign thread would trigger detection.
+
+### 2. AgentReflectionBridge (In-Process Agent)
+
+When high-throughput method calls are required (e.g. reading hundreds of entities every Minecraft game tick), `njava-agent` eliminates JNI IPC overhead.
+
+- Dynamically injected into JVM memory via in-memory `ClassLoader.defineClass`.
+- Communicates with the runner over localhost HTTP RPC.
+- Supports `Java.runOn(executor, fn)` to delegate execution directly onto application threads (such as the main render or tick thread).
+
+## Quick Start
+
+The standard workflow to attach to a target JVM and acquire a `JavaContext`:
+
+```typescript
+import { Process } from 'bun-winapi';
+import { RemoteCallableMemoryAccessor } from 'bun-xffi';
+import { attachJvm, createJavaContext } from 'bun-njava';
+
+// 1. Attach to target process
+const process = Process.findByName('javaw.exe');
+const memory = new RemoteCallableMemoryAccessor(process.pid);
+
+// 2. Attach JVM bridge (Pure JNI)
+const bridge = await attachJvm(memory);
+
+// 3. Create Nashorn/GraalJS compatible JavaContext
+const Java = createJavaContext(bridge);
+
+// 4. Access classes and instances
+const System = Java.type('java.lang.System');
+const javaVersion = System.getProperty('java.version');
+console.log(`Target JVM Version: ${javaVersion}`);
+```
+
+## Synchronous and Asynchronous Execution
+
+`JavaContext` supports both synchronous and asynchronous paradigms:
+
+- **Synchronous Mode (`Java.asSync()`):** Calls return values immediately (`const res = myObj.getName()`), providing the most ergonomic DX for automation scripts.
+- **Asynchronous Mode (`Java.asAsync()`):** Every reflective call returns a Promise (`const res = await myObj.getName()`).
+
+You can also elevate an active JNI connection to agent mode at any time:
+
+```typescript
+// Transition from pure JNI to in-process Agent RPC
+const agentJava = await Java.transitionToAgent();
+```

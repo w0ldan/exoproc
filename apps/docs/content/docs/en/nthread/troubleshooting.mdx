@@ -1,0 +1,14 @@
+---
+title: 'NThread troubleshooting'
+description: '| Symptom               | Likely cause                             | First check                                |'
+---
+
+| Symptom               | Likely cause                             | First check                                |
+| --------------------- | ---------------------------------------- | ------------------------------------------ |
+| `No*AddressError`     | Stub scan incomplete or no suitable stub | Windows x64, modules, initialization order |
+| `CallTimeoutError`    | Call did not return, ABI error, deadlock | Address, signature, thread state, timeout  |
+| `CallThreadDiedError` | Thread ended or call flow ended it       | Exit code and return behavior              |
+| RSP mismatch warning  | Return chain or stack-argument problem   | Argument count, shadow space, alignment    |
+| Hook enable timeout   | Driving thread was also suspended        | NThread/accessor thread ID                 |
+
+A timeout means the thread did not get back to the spin stub; increasing it can only hide a deadlock. If `expectedRsp` is configured, both `call()` and `callSync()` check it after the call. For a minimal reproduction, use a fresh controlled target, one observable thread or race winner, and a single fast side-effect-free call.

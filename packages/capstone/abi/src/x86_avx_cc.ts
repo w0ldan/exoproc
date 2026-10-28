@@ -1,0 +1,41 @@
+import { cdefines, type CDefineValueType } from 'bun-xffi/cdefine';
+
+export const x86_avx_cc = cdefines(
+  {
+    INVALID: 0, // Uninitialized.
+    EQ: 1,
+    LT: 2,
+    LE: 3,
+    UNORD: 4,
+    NEQ: 5,
+    NLT: 6,
+    NLE: 7,
+    ORD: 8,
+    EQ_UQ: 9,
+    NGE: 10,
+    NGT: 11,
+    FALSE: 12,
+    NEQ_OQ: 13,
+    GE: 14,
+    GT: 15,
+    TRUE: 16,
+    EQ_OS: 17,
+    LT_OQ: 18,
+    LE_OQ: 19,
+    UNORD_S: 20,
+    NEQ_US: 21,
+    NLT_UQ: 22,
+    NLE_UQ: 23,
+    ORD_S: 24,
+    EQ_US: 25,
+    NGE_UQ: 26,
+    NGT_UQ: 27,
+    FALSE_OS: 28,
+    NEQ_OS: 29,
+    GE_OQ: 30,
+    GT_OQ: 31,
+    TRUE_US: 32,
+  },
+  'X86_AVX_CC',
+);
+export type x86_avx_cc = CDefineValueType<typeof x86_avx_cc>;

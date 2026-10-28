@@ -1,0 +1,114 @@
+---
+title: 'Sınıf Genişletme ve Bytecode Enjeksiyonu'
+description: 'Java.extend(), Java.super() ve Java.defineClass() ile Java sınıflarını miras alma, arayüz uygulama ve dinamik bytecode yükleme.'
+---
+
+Exoproc, yalnızca mevcut Java sınıflarını çağırmakla kalmaz; aynı zamanda Java sınıflarını **JavaScript içinden miras almanıza**, Java arayüzlerini (**interfaces**) uygulamanıza ve çalışma zamanında yeni sınıflar tanımlamanıza olanak tanır.
+
+## Sınıfları ve Arayüzleri Genişletme: `Java.extend()`
+
+`Java.extend(parentClass, overrides)` fonksiyonu, belirtilen üst sınıfı miras alan veya arayüzü uygulayan dinamik bir alt sınıf üretir:
+
+```typescript
+const Runnable = Java.type('java.lang.Runnable');
+
+// Java Runnable arayüzünü uygulayan bir alt sınıf tanımla
+const CustomRunnableClass = Java.extend(Runnable, {
+  run: function () {
+    console.log('JavaScript callback Runnable içinden çalıştı!');
+  },
+});
+
+// Yeni sınıftan bir örnek oluştur
+const runnableInstance = new CustomRunnableClass();
+
+// Java thread'inde veya doğrudan çalıştır
+runnableInstance.run();
+```
+
+### Hibrit Yürütme Mimarisi (Hybrid Execution)
+
+Exoproc'un sınıf genişletme mekanizması hibrit bir tasarıma sahiptir:
+
+1. **JavaScript -> Java Çağrıları:** JavaScript tarafından çağrılan ezilmiş (overridden) metodlar, IPC veya JNI gidiş-dönüş maliyeti olmaksızın sıfır gecikmeyle doğrudan JS motorunda yürütülür.
+2. **Java -> JavaScript Çağrıları:** Hedef JVM (örneğin bir oyun döngüsü veya olay dinleyicisi) bu metodları çağırdığında, arka plandaki callback köprüsü üzerinden hedef JS fonksiyonu tetiklenir.
+
+### Birden Fazla Metod Ezme Örneği
+
+```typescript
+const MouseListener = Java.type('java.awt.event.MouseListener');
+
+const MyListener = Java.extend(MouseListener, {
+  mouseClicked: (event) => {
+    console.log(`Tıklama koordinatı: ${event.getX()}, ${event.getY()}`);
+  },
+  mousePressed: (event) => {},
+  mouseReleased: (event) => {},
+  mouseEntered: (event) => {},
+  mouseExited: (event) => {},
+});
+```
+
+## Üst Sınıf Metodlarını Çağırma: `Java.super()`
+
+Bir metod ezildiğinde (override edildiğinde), orijinal üst sınıfın implementasyonuna erişmek için `Java.super(instance)` kullanılır:
+
+```typescript
+const ArrayList = Java.type('java.util.ArrayList');
+
+// ArrayList'i genişlet ve add metodunu loglama ile sar
+const LoggedListClass = Java.extend(ArrayList, {
+  add: function (element) {
+    console.log(`Öğe ekleniyor: ${element}`);
+
+    // Orijinal ArrayList.add() implementasyonunu çağır
+    return Java.super(this).add(element);
+  },
+});
+
+const list = new LoggedListClass();
+list.add('Örnek Veri'); // Konsola log basar ve orijinal listeye ekler
+console.log(list.size()); // 1
+```
+
+Exoproc, arka planda sentetik `__super_<method>` köprüleri kurarak JVM'in sanal metod çözümleme tablosunu aşar ve doğrudan üst sınıf metoduna zıplar.
+
+## Doğrudan Bytecode Tanımlama: `Java.defineClass()`
+
+Önceden derlenmiş Java sınıf bytecode'unu (`Uint8Array` veya `Buffer`) hedef JVM belleğinde anında yeni bir sınıf olarak tanımlayabilirsiniz:
+
+```typescript
+// rawBytecode: Derlenmiş .class dosyası içeriği
+const MyLoadedClass = Java.defineClass(
+  'com.example.InjectedClass',
+  rawBytecode,
+);
+
+// Yeni sınıfı hemen kullanmaya başla
+const instance = new MyLoadedClass();
+instance.doWork();
+```
+
+### Çalışma Zamanında Java Derleme (ECJ Entegrasyonu)
+
+Exoproc monoreposu içinde yerleşik **Eclipse Compiler for Java (ECJ)** ve **Tiny-Remapper** desteği bulunur. Bu sayede ham Java kaynak kodunu çalışma zamanında derleyip hedefe tek adımda yükleyebilirsiniz:
+
+```typescript
+import { compileJavaSync } from 'bun-njava';
+
+const javaSource = `
+package com.example;
+public class FastMath {
+    public static int multiply(int a, int b) {
+        return a * b;
+    }
+}
+`;
+
+// Kaynak kodu derle
+const compileResult = compileJavaSync({ source: javaSource });
+
+// Hedef JVM belleğine enjekte et
+const FastMath = Java.defineClass(compileResult);
+console.log(FastMath.multiply(6, 7)); // 42
+```

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.w0ldan/exoproc",
+  "title": "Exoproc",
+  "description": "Native Windows x64 reverse engineering, thread hijacking, function redirection, memory inspection, and runtime instrumentation from your terminal or AI agent with one CLI and MCP server.",
+  "websiteUrl": "https://exoproc.woldan.me",
+  "repository": {
+    "url": "https://github.com/w0ldan/exoproc",
+    "source": "github"
+  },
+  "version": "0.6.10",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "exoproc",
+      "version": "0.6.9",
+      "runtimeHint": "bunx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    }
+  ]
+}

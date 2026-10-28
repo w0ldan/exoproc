@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "composite": true
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../exoproc-mcp" },
+    { "path": "../win32/api" },
+    { "path": "../xffi" },
+    { "path": "../nthread" },
+    { "path": "../minhook" },
+    { "path": "../capstone/core" },
+    { "path": "../simulate" },
+    { "path": "../java/njava" },
+    { "path": "../accessors" },
+    { "path": "../utils" }
+  ]
+}

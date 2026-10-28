@@ -1,0 +1,72 @@
+{
+  "name": "exoproc",
+  "publishConfig": {
+    "access": "public"
+  },
+  "mcpName": "io.github.w0ldan/exoproc",
+  "version": "0.6.9",
+  "description": "Unified CLI and Model Context Protocol (MCP) server for native Windows x64 reverse engineering, thread hijacking, function redirection, memory inspection, and runtime instrumentation.",
+  "main": "./dist/index.js",
+  "bin": {
+    "exoproc": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    },
+    "./setup": {
+      "types": "./dist/setup/index.d.ts",
+      "import": "./dist/setup/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "exoproc",
+    "mcp",
+    "reverse-engineering",
+    "binary-analysis",
+    "hooking",
+    "minhook",
+    "thread-hijacking",
+    "memory",
+    "win32",
+    "instrumentation",
+    "cli",
+    "agent-skills",
+    "claude",
+    "cursor"
+  ],
+  "author": "Serkan",
+  "dependencies": {
+    "@clack/prompts": "^1.8.1",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "exoproc-mcp": "workspace:*",
+    "bun-winapi": "workspace:*",
+    "bun-xffi": "workspace:*",
+    "bun-nthread": "workspace:*",
+    "bun-minhook": "workspace:*",
+    "bun-capstone": "workspace:*",
+    "win32-simulate": "workspace:*",
+    "bun-njava": "workspace:*",
+    "exoproc-accessors": "workspace:*",
+    "exoproc-utils": "workspace:*"
+  }
+}

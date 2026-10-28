@@ -1,0 +1,1457 @@
+{
+  "classes": {
+    "org.exoproc.njava.agent.utils.Exoproc": {
+      "methods": {
+        "screenshot": {
+          "params": ["String"],
+          "returnType": "String",
+          "isStatic": true
+        }
+      }
+    },
+    "Exoproc": {
+      "obf": "org.exoproc.njava.agent.utils.Exoproc"
+    },
+    "net.minecraft.client.Minecraft": {
+      "fields": {
+        "theMinecraft": "Minecraft",
+        "thePlayer": "EntityPlayerSP",
+        "theWorld": "WorldClient",
+        "gameSettings": "GameSettings",
+        "playerController": "PlayerControllerMP",
+        "currentScreen": "GuiScreen",
+        "fontRendererObj": "FontRenderer",
+        "renderGlobal": "RenderGlobal",
+        "entityRenderer": "EntityRenderer",
+        "renderManager": "RenderManager",
+        "objectMouseOver": "MovingObjectPosition",
+        "timer": "Timer",
+        "session": "Session",
+        "inGameHasFocus": "boolean",
+        "leftClickCounter": "int"
+      },
+      "methods": {
+        "getMinecraft": {
+          "params": [],
+          "returnType": "Minecraft",
+          "isStatic": true
+        },
+        "runTick": {
+          "params": [],
+          "returnType": "void"
+        },
+        "clickMouse": {
+          "params": [],
+          "returnType": "void"
+        },
+        "rightClickMouse": {
+          "params": [],
+          "returnType": "void"
+        },
+        "displayGuiScreen": {
+          "params": ["GuiScreen"],
+          "returnType": "void"
+        },
+        "setIngameFocus": {
+          "params": [],
+          "returnType": "void"
+        },
+        "setIngameNotInFocus": {
+          "params": [],
+          "returnType": "void"
+        },
+        "shutdown": {
+          "params": [],
+          "returnType": "void"
+        },
+        "addScheduledTask": {
+          "params": ["Runnable"],
+          "returnType": "ListenableFuture"
+        }
+      }
+    },
+    "Minecraft": {
+      "obf": "net.minecraft.client.Minecraft"
+    },
+    "net.minecraft.client.gui.GuiScreen": {
+      "fields": {
+        "buttonList": "List",
+        "labelList": "List",
+        "mc": "Minecraft",
+        "itemRender": "RenderItem",
+        "width": "int",
+        "height": "int",
+        "allowUserInput": "boolean"
+      },
+      "methods": {
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        },
+        "drawScreen": {
+          "params": ["int", "int", "float"],
+          "returnType": "void"
+        },
+        "mouseClicked": {
+          "params": ["int", "int", "int"],
+          "returnType": "void"
+        },
+        "keyTyped": {
+          "params": ["char", "int"],
+          "returnType": "void"
+        },
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "onGuiClosed": {
+          "params": [],
+          "returnType": "void"
+        },
+        "doesGuiPauseGame": {
+          "params": [],
+          "returnType": "boolean"
+        }
+      }
+    },
+    "GuiScreen": {
+      "obf": "net.minecraft.client.gui.GuiScreen"
+    },
+    "net.minecraft.client.gui.GuiButton": {
+      "fields": {
+        "id": "int",
+        "xPosition": "int",
+        "yPosition": "int",
+        "width": "int",
+        "height": "int",
+        "displayString": "String",
+        "enabled": "boolean",
+        "visible": "boolean",
+        "hovered": "boolean"
+      },
+      "methods": {
+        "drawButton": {
+          "params": ["Minecraft", "int", "int"],
+          "returnType": "void"
+        },
+        "mousePressed": {
+          "params": ["Minecraft", "int", "int"],
+          "returnType": "boolean"
+        },
+        "mouseReleased": {
+          "params": ["int", "int"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiButton": {
+      "obf": "net.minecraft.client.gui.GuiButton"
+    },
+    "net.minecraft.client.gui.GuiButtonLanguage": {
+      "superclass": "GuiButton",
+      "fields": {},
+      "methods": {}
+    },
+    "GuiButtonLanguage": {
+      "obf": "net.minecraft.client.gui.GuiButtonLanguage"
+    },
+    "net.minecraft.client.gui.GuiLockIconButton": {
+      "superclass": "GuiButton",
+      "fields": {},
+      "methods": {}
+    },
+    "GuiLockIconButton": {
+      "obf": "net.minecraft.client.gui.GuiLockIconButton"
+    },
+    "net.minecraft.client.gui.GuiMainMenu": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "buttonResetDemo": "GuiButton",
+        "splashText": "String"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        },
+        "drawScreen": {
+          "params": ["int", "int", "float"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiMainMenu": {
+      "obf": "net.minecraft.client.gui.GuiMainMenu"
+    },
+    "net.minecraft.client.gui.GuiMultiplayer": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen",
+        "btnSelectServer": "GuiButton",
+        "btnEditServer": "GuiButton",
+        "btnDeleteServer": "GuiButton"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiMultiplayer": {
+      "obf": "net.minecraft.client.gui.GuiMultiplayer"
+    },
+    "net.minecraft.client.gui.GuiOptions": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen",
+        "gameSettings": "GameSettings"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiOptions": {
+      "obf": "net.minecraft.client.gui.GuiOptions"
+    },
+    "net.minecraft.client.gui.GuiSelectWorld": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiSelectWorld": {
+      "obf": "net.minecraft.client.gui.GuiSelectWorld"
+    },
+    "net.minecraft.client.gui.GuiCreateWorld": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiCreateWorld": {
+      "obf": "net.minecraft.client.gui.GuiCreateWorld"
+    },
+    "net.minecraft.client.gui.GuiScreenServerList": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiScreenServerList": {
+      "obf": "net.minecraft.client.gui.GuiScreenServerList"
+    },
+    "net.minecraft.client.gui.GuiScreenAddServer": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiScreenAddServer": {
+      "obf": "net.minecraft.client.gui.GuiScreenAddServer"
+    },
+    "net.minecraft.client.gui.GuiIngameMenu": {
+      "superclass": "GuiScreen",
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiIngameMenu": {
+      "obf": "net.minecraft.client.gui.GuiIngameMenu"
+    },
+    "net.minecraft.client.multiplayer.GuiConnecting": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "previousGuiScreen": "GuiScreen"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiConnecting": {
+      "obf": "net.minecraft.client.multiplayer.GuiConnecting"
+    },
+    "net.minecraft.client.gui.GuiDisconnected": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiDisconnected": {
+      "obf": "net.minecraft.client.gui.GuiDisconnected"
+    },
+    "net.minecraft.client.gui.GuiChat": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "defaultInputFieldText": "String"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "keyTyped": {
+          "params": ["char", "int"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiChat": {
+      "obf": "net.minecraft.client.gui.GuiChat"
+    },
+    "net.minecraft.client.gui.inventory.GuiContainer": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "inventorySlots": "Container",
+        "guiLeft": "int",
+        "guiTop": "int",
+        "xSize": "int",
+        "ySize": "int"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "drawScreen": {
+          "params": ["int", "int", "float"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiContainer": {
+      "obf": "net.minecraft.client.gui.inventory.GuiContainer"
+    },
+    "net.minecraft.client.gui.inventory.GuiInventory": {
+      "superclass": "GuiContainer",
+      "fields": {
+        "oldMouseX": "float",
+        "oldMouseY": "float"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "drawScreen": {
+          "params": ["int", "int", "float"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiInventory": {
+      "obf": "net.minecraft.client.gui.inventory.GuiInventory"
+    },
+    "net.minecraft.client.gui.GuiGameOver": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "enableButtonsTimer": "int"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiGameOver": {
+      "obf": "net.minecraft.client.gui.GuiGameOver"
+    },
+    "net.minecraft.client.gui.GuiScreenOptionsSounds": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "field_146507_a": "GuiScreen",
+        "game_settings_4": "GameSettings",
+        "field_146505_f": "String"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiScreenOptionsSounds": {
+      "obf": "net.minecraft.client.gui.GuiScreenOptionsSounds"
+    },
+    "net.minecraft.client.gui.GuiVideoSettings": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentGuiScreen": "GuiScreen",
+        "screenTitle": "String",
+        "guiGameSettings": "GameSettings"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiVideoSettings": {
+      "obf": "net.minecraft.client.gui.GuiVideoSettings"
+    },
+    "net.minecraft.client.gui.GuiControls": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen",
+        "screenTitle": "String",
+        "options": "GameSettings",
+        "buttonReset": "GuiButton"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiControls": {
+      "obf": "net.minecraft.client.gui.GuiControls"
+    },
+    "net.minecraft.client.gui.GuiLanguage": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen",
+        "game_settings_3": "GameSettings"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiLanguage": {
+      "obf": "net.minecraft.client.gui.GuiLanguage"
+    },
+    "net.minecraft.client.gui.GuiScreenChatOptions": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen",
+        "game_settings": "GameSettings",
+        "chatOptionsTitle": "String"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiScreenChatOptions": {
+      "obf": "net.minecraft.client.gui.GuiScreenChatOptions"
+    },
+    "net.minecraft.client.gui.GuiScreenResourcePacks": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiScreenResourcePacks": {
+      "obf": "net.minecraft.client.gui.GuiScreenResourcePacks"
+    },
+    "net.minecraft.client.gui.GuiScreenSnooper": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "field_146608_a": "GuiScreen",
+        "game_settings_2": "GameSettings"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiScreenSnooper": {
+      "obf": "net.minecraft.client.gui.GuiScreenSnooper"
+    },
+    "net.minecraft.client.gui.GuiCustomizeSkin": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen",
+        "title": "String"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiCustomizeSkin": {
+      "obf": "net.minecraft.client.gui.GuiCustomizeSkin"
+    },
+    "net.minecraft.client.gui.GuiShareToLan": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "field_146598_a": "GuiScreen",
+        "field_146597_g": "GuiButton",
+        "field_146596_h": "GuiButton"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiShareToLan": {
+      "obf": "net.minecraft.client.gui.GuiShareToLan"
+    },
+    "net.minecraft.client.gui.achievement.GuiAchievements": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentScreen": "GuiScreen"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiAchievements": {
+      "obf": "net.minecraft.client.gui.achievement.GuiAchievements"
+    },
+    "net.minecraft.client.gui.achievement.GuiStats": {
+      "superclass": "GuiScreen",
+      "fields": {
+        "parentGUI": "GuiScreen"
+      },
+      "methods": {
+        "initGui": {
+          "params": [],
+          "returnType": "void"
+        },
+        "actionPerformed": {
+          "params": ["GuiButton"],
+          "returnType": "void"
+        }
+      }
+    },
+    "GuiStats": {
+      "obf": "net.minecraft.client.gui.achievement.GuiStats"
+    },
+    "net.minecraft.client.entity.EntityPlayerSP": {
+      "superclass": "EntityPlayer",
+      "fields": {
+        "movementInput": "MovementInput",
+        "sendQueue": "NetHandlerPlayClient"
+      },
+      "methods": {
+        "sendChatMessage": {
+          "params": ["String"],
+          "returnType": "void"
+        },
+        "swingItem": {
+          "params": [],
+          "returnType": "void"
+        },
+        "respawnPlayer": {
+          "params": [],
+          "returnType": "void"
+        },
+        "closeScreen": {
+          "params": [],
+          "returnType": "void"
+        }
+      }
+    },
+    "EntityPlayerSP": {
+      "obf": "net.minecraft.client.entity.EntityPlayerSP"
+    },
+    "net.minecraft.entity.player.EntityPlayer": {
+      "superclass": "EntityLivingBase",
+      "fields": {
+        "inventory": "InventoryPlayer",
+        "inventoryContainer": "Container",
+        "openContainer": "Container",
+        "capabilities": "PlayerCapabilities",
+        "foodStats": "FoodStats",
+        "experienceLevel": "int",
+        "experienceTotal": "int",
+        "experience": "float"
+      },
+      "methods": {
+        "getGameProfile": {
+          "params": [],
+          "returnType": "GameProfile"
+        },
+        "isBlocking": {
+          "params": [],
+          "returnType": "boolean"
+        },
+        "getItemInUse": {
+          "params": [],
+          "returnType": "ItemStack"
+        },
+        "getItemInUseDuration": {
+          "params": [],
+          "returnType": "int"
+        }
+      }
+    },
+    "EntityPlayer": {
+      "obf": "net.minecraft.entity.player.EntityPlayer"
+    },
+    "net.minecraft.entity.EntityLivingBase": {
+      "superclass": "Entity",
+      "fields": {
+        "renderYawOffset": "float",
+        "rotationYawHead": "float",
+        "prevRotationYawHead": "float",
+        "jumpMovementFactor": "float",
+        "hurtTime": "int",
+        "maxHurtTime": "int",
+        "attackedAtYaw": "float",
+        "deathTime": "int",
+        "moveStrafing": "float",
+        "moveForward": "float",
+        "isJumping": "boolean",
+        "health": "float",
+        "maxHealth": "float"
+      },
+      "methods": {
+        "getHealth": {
+          "params": [],
+          "returnType": "float"
+        },
+        "setHealth": {
+          "params": ["float"],
+          "returnType": "void"
+        },
+        "getMaxHealth": {
+          "params": [],
+          "returnType": "float"
+        },
+        "getHeldItem": {
+          "params": [],
+          "returnType": "ItemStack"
+        },
+        "getEquipmentInSlot": {
+          "params": ["int"],
+          "returnType": "ItemStack"
+        },
+        "swingItem": {
+          "params": [],
+          "returnType": "void"
+        }
+      }
+    },
+    "EntityLivingBase": {
+      "obf": "net.minecraft.entity.EntityLivingBase"
+    },
+    "net.minecraft.entity.Entity": {
+      "fields": {
+        "entityId": "int",
+        "posX": "double",
+        "posY": "double",
+        "posZ": "double",
+        "motionX": "double",
+        "motionY": "double",
+        "motionZ": "double",
+        "rotationYaw": "float",
+        "rotationPitch": "float",
+        "prevRotationYaw": "float",
+        "prevRotationPitch": "float",
+        "boundingBox": "AxisAlignedBB",
+        "onGround": "boolean",
+        "isCollidedHorizontally": "boolean",
+        "isCollidedVertically": "boolean",
+        "isCollided": "boolean",
+        "velocityChanged": "boolean",
+        "fallDistance": "float",
+        "isDead": "boolean",
+        "width": "float",
+        "height": "float",
+        "ticksExisted": "int",
+        "stepHeight": "float",
+        "noClip": "boolean",
+        "worldObj": "World"
+      },
+      "methods": {
+        "getEntityId": {
+          "params": [],
+          "returnType": "int"
+        },
+        "getName": {
+          "params": [],
+          "returnType": "String"
+        },
+        "getUniqueID": {
+          "params": [],
+          "returnType": "UUID"
+        },
+        "isSneaking": {
+          "params": [],
+          "returnType": "boolean"
+        },
+        "setSneaking": {
+          "params": ["boolean"],
+          "returnType": "void"
+        },
+        "isSprinting": {
+          "params": [],
+          "returnType": "boolean"
+        },
+        "setSprinting": {
+          "params": ["boolean"],
+          "returnType": "void"
+        },
+        "isInWater": {
+          "params": [],
+          "returnType": "boolean"
+        },
+        "setPosition": {
+          "params": ["double", "double", "double"],
+          "returnType": "void"
+        }
+      }
+    },
+    "Entity": {
+      "obf": "net.minecraft.entity.Entity"
+    },
+    "net.minecraft.client.multiplayer.WorldClient": {
+      "superclass": "World",
+      "fields": {
+        "sendQueue": "NetHandlerPlayClient",
+        "loadedEntityList": "List",
+        "playerEntities": "List"
+      },
+      "methods": {
+        "getWorldTime": {
+          "params": [],
+          "returnType": "long"
+        },
+        "isRaining": {
+          "params": [],
+          "returnType": "boolean"
+        },
+        "sendQuittingDisconnectingPacket": {
+          "params": [],
+          "returnType": "void"
+        }
+      }
+    },
+    "WorldClient": {
+      "obf": "net.minecraft.client.multiplayer.WorldClient"
+    },
+    "net.minecraft.world.World": {
+      "fields": {
+        "loadedEntityList": "List",
+        "playerEntities": "List",
+        "loadedTileEntityList": "List",
+        "provider": "WorldProvider"
+      },
+      "methods": {
+        "getBlockState": {
+          "params": ["BlockPos"],
+          "returnType": "IBlockState"
+        },
+        "getEntitiesWithinAABBExcludingEntity": {
+          "params": ["Entity", "AxisAlignedBB"],
+          "returnType": "List"
+        },
+        "rayTraceBlocks": {
+          "params": ["Vec3", "Vec3"],
+          "returnType": "MovingObjectPosition"
+        },
+        "spawnEntityInWorld": {
+          "params": ["Entity"],
+          "returnType": "boolean"
+        }
+      }
+    },
+    "World": {
+      "obf": "net.minecraft.world.World"
+    },
+    "net.minecraft.client.multiplayer.PlayerControllerMP": {
+      "fields": {
+        "curBlockDamageMP": "float",
+        "blockHitDelay": "int",
+        "isHittingBlock": "boolean",
+        "currentGameType": "GameType"
+      },
+      "methods": {
+        "clickBlock": {
+          "params": ["BlockPos", "EnumFacing"],
+          "returnType": "boolean"
+        },
+        "onPlayerDamageBlock": {
+          "params": ["BlockPos", "EnumFacing"],
+          "returnType": "boolean"
+        },
+        "resetBlockRemoving": {
+          "params": [],
+          "returnType": "void"
+        },
+        "attackEntity": {
+          "params": ["EntityPlayer", "Entity"],
+          "returnType": "void"
+        }
+      }
+    },
+    "PlayerControllerMP": {
+      "obf": "net.minecraft.client.multiplayer.PlayerControllerMP"
+    },
+    "net.minecraft.client.settings.GameSettings": {
+      "fields": {
+        "keyBindForward": "KeyBinding",
+        "keyBindLeft": "KeyBinding",
+        "keyBindBack": "KeyBinding",
+        "keyBindRight": "KeyBinding",
+        "keyBindJump": "KeyBinding",
+        "keyBindSneak": "KeyBinding",
+        "keyBindSprint": "KeyBinding",
+        "keyBindAttack": "KeyBinding",
+        "keyBindUseItem": "KeyBinding",
+        "pauseOnLostFocus": "boolean",
+        "mouseSensitivity": "float",
+        "fovSetting": "float",
+        "gammaSetting": "float"
+      }
+    },
+    "GameSettings": {
+      "obf": "net.minecraft.client.settings.GameSettings"
+    },
+    "net.minecraft.client.settings.KeyBinding": {
+      "fields": {
+        "keyDescription": "String",
+        "keyCode": "int",
+        "pressed": "boolean",
+        "pressTime": "int"
+      },
+      "methods": {
+        "setKeyBindState": {
+          "params": ["int", "boolean"],
+          "returnType": "void",
+          "isStatic": true
+        },
+        "unPressAllKeys": {
+          "params": [],
+          "returnType": "void",
+          "isStatic": true
+        },
+        "isKeyDown": {
+          "params": [],
+          "returnType": "boolean"
+        },
+        "isPressed": {
+          "params": [],
+          "returnType": "boolean"
+        },
+        "getKeyCode": {
+          "params": [],
+          "returnType": "int"
+        }
+      }
+    },
+    "KeyBinding": {
+      "obf": "net.minecraft.client.settings.KeyBinding"
+    },
+    "net.minecraft.entity.player.InventoryPlayer": {
+      "fields": {
+        "mainInventory": "ItemStack[]",
+        "armorInventory": "ItemStack[]",
+        "currentItem": "int"
+      },
+      "methods": {
+        "getCurrentItem": {
+          "params": [],
+          "returnType": "ItemStack"
+        },
+        "getFirstEmptyStack": {
+          "params": [],
+          "returnType": "int"
+        },
+        "addItemStackToInventory": {
+          "params": ["ItemStack"],
+          "returnType": "boolean"
+        }
+      }
+    },
+    "InventoryPlayer": {
+      "obf": "net.minecraft.entity.player.InventoryPlayer"
+    },
+    "net.minecraft.item.ItemStack": {
+      "fields": {
+        "stackSize": "int",
+        "animationsToGo": "int",
+        "item": "Item",
+        "stackTagCompound": "NBTTagCompound",
+        "itemDamage": "int"
+      },
+      "methods": {
+        "getItem": {
+          "params": [],
+          "returnType": "Item"
+        },
+        "getMaxStackSize": {
+          "params": [],
+          "returnType": "int"
+        },
+        "isItemStackDamageable": {
+          "params": [],
+          "returnType": "boolean"
+        },
+        "getItemDamage": {
+          "params": [],
+          "returnType": "int"
+        },
+        "setItemDamage": {
+          "params": ["int"],
+          "returnType": "void"
+        },
+        "getMaxDamage": {
+          "params": [],
+          "returnType": "int"
+        },
+        "getDisplayName": {
+          "params": [],
+          "returnType": "String"
+        }
+      }
+    },
+    "ItemStack": {
+      "obf": "net.minecraft.item.ItemStack"
+    },
+    "net.minecraft.item.Item": {
+      "fields": {
+        "itemRegistry": "RegistryNamespaced"
+      },
+      "methods": {
+        "getItemById": {
+          "params": ["int"],
+          "returnType": "Item",
+          "isStatic": true
+        },
+        "getIdFromItem": {
+          "params": ["Item"],
+          "returnType": "int",
+          "isStatic": true
+        },
+        "getUnlocalizedName": {
+          "params": [],
+          "returnType": "String"
+        }
+      }
+    },
+    "Item": {
+      "obf": "net.minecraft.item.Item"
+    },
+    "net.minecraft.block.Block": {
+      "fields": {
+        "blockRegistry": "RegistryNamespacedDefaultedByKey",
+        "material": "Material"
+      },
+      "methods": {
+        "getBlockById": {
+          "params": ["int"],
+          "returnType": "Block",
+          "isStatic": true
+        },
+        "getIdFromBlock": {
+          "params": ["Block"],
+          "returnType": "int",
+          "isStatic": true
+        },
+        "getLocalizedName": {
+          "params": [],
+          "returnType": "String"
+        }
+      }
+    },
+    "Block": {
+      "obf": "net.minecraft.block.Block"
+    },
+    "net.minecraft.block.state.IBlockState": {
+      "methods": {
+        "getBlock": {
+          "params": [],
+          "returnType": "Block"
+        }
+      }
+    },
+    "IBlockState": {
+      "obf": "net.minecraft.block.state.IBlockState"
+    },
+    "net.minecraft.util.BlockPos": {
+      "superclass": "Vec3i",
+      "fields": {
+        "x": "int",
+        "y": "int",
+        "z": "int"
+      },
+      "methods": {
+        "getX": {
+          "params": [],
+          "returnType": "int"
+        },
+        "getY": {
+          "params": [],
+          "returnType": "int"
+        },
+        "getZ": {
+          "params": [],
+          "returnType": "int"
+        },
+        "add": {
+          "params": ["int", "int", "int"],
+          "returnType": "BlockPos"
+        },
+        "up": {
+          "params": [],
+          "returnType": "BlockPos"
+        },
+        "down": {
+          "params": [],
+          "returnType": "BlockPos"
+        }
+      }
+    },
+    "BlockPos": {
+      "obf": "net.minecraft.util.BlockPos"
+    },
+    "net.minecraft.util.Vec3": {
+      "fields": {
+        "xCoord": "double",
+        "yCoord": "double",
+        "zCoord": "double"
+      },
+      "methods": {
+        "addVector": {
+          "params": ["double", "double", "double"],
+          "returnType": "Vec3"
+        },
+        "distanceTo": {
+          "params": ["Vec3"],
+          "returnType": "double"
+        },
+        "squareDistanceTo": {
+          "params": ["Vec3"],
+          "returnType": "double"
+        },
+        "lengthVector": {
+          "params": [],
+          "returnType": "double"
+        },
+        "normalize": {
+          "params": [],
+          "returnType": "Vec3"
+        },
+        "dotProduct": {
+          "params": ["Vec3"],
+          "returnType": "double"
+        }
+      }
+    },
+    "Vec3": {
+      "obf": "net.minecraft.util.Vec3"
+    },
+    "net.minecraft.util.AxisAlignedBB": {
+      "fields": {
+        "minX": "double",
+        "minY": "double",
+        "minZ": "double",
+        "maxX": "double",
+        "maxY": "double",
+        "maxZ": "double"
+      },
+      "methods": {
+        "addCoord": {
+          "params": ["double", "double", "double"],
+          "returnType": "AxisAlignedBB"
+        },
+        "expand": {
+          "params": ["double", "double", "double"],
+          "returnType": "AxisAlignedBB"
+        },
+        "contract": {
+          "params": ["double", "double", "double"],
+          "returnType": "AxisAlignedBB"
+        },
+        "offset": {
+          "params": ["double", "double", "double"],
+          "returnType": "AxisAlignedBB"
+        },
+        "intersectsWith": {
+          "params": ["AxisAlignedBB"],
+          "returnType": "boolean"
+        },
+        "isVecInside": {
+          "params": ["Vec3"],
+          "returnType": "boolean"
+        }
+      }
+    },
+    "AxisAlignedBB": {
+      "obf": "net.minecraft.util.AxisAlignedBB"
+    },
+    "net.minecraft.util.MovingObjectPosition": {
+      "fields": {
+        "typeOfHit": "MovingObjectType",
+        "sideHit": "EnumFacing",
+        "hitVec": "Vec3",
+        "entityHit": "Entity",
+        "blockPos": "BlockPos"
+      },
+      "methods": {
+        "getBlockPos": {
+          "params": [],
+          "returnType": "BlockPos"
+        }
+      }
+    },
+    "MovingObjectPosition": {
+      "obf": "net.minecraft.util.MovingObjectPosition"
+    },
+    "net.minecraft.util.Timer": {
+      "fields": {
+        "timerSpeed": "float",
+        "elapsedPartialTicks": "float",
+        "elapsedTicks": "int",
+        "renderPartialTicks": "float"
+      },
+      "methods": {
+        "updateTimer": {
+          "params": [],
+          "returnType": "void"
+        }
+      }
+    },
+    "Timer": {
+      "obf": "net.minecraft.util.Timer"
+    },
+    "net.minecraft.client.renderer.entity.RenderManager": {
+      "fields": {
+        "renderPosX": "double",
+        "renderPosY": "double",
+        "renderPosZ": "double",
+        "viewerPosX": "double",
+        "viewerPosY": "double",
+        "viewerPosZ": "double",
+        "playerViewX": "float",
+        "playerViewY": "float"
+      }
+    },
+    "RenderManager": {
+      "obf": "net.minecraft.client.renderer.entity.RenderManager"
+    },
+    "net.minecraft.client.renderer.EntityRenderer": {
+      "fields": {
+        "mc": "Minecraft",
+        "farPlaneDistance": "float",
+        "pointedEntity": "Entity"
+      },
+      "methods": {
+        "getMouseOver": {
+          "params": ["float"],
+          "returnType": "void"
+        },
+        "orientCamera": {
+          "params": ["float"],
+          "returnType": "void"
+        }
+      }
+    },
+    "EntityRenderer": {
+      "obf": "net.minecraft.client.renderer.EntityRenderer"
+    },
+    "net.minecraft.util.Session": {
+      "fields": {
+        "username": "String",
+        "playerID": "String",
+        "token": "String"
+      },
+      "methods": {
+        "getUsername": {
+          "params": [],
+          "returnType": "String"
+        },
+        "getPlayerID": {
+          "params": [],
+          "returnType": "String"
+        },
+        "getToken": {
+          "params": [],
+          "returnType": "String"
+        },
+        "getSessionID": {
+          "params": [],
+          "returnType": "String"
+        }
+      }
+    },
+    "Session": {
+      "obf": "net.minecraft.util.Session"
+    },
+    "net.minecraft.entity.player.PlayerCapabilities": {
+      "fields": {
+        "disableDamage": "boolean",
+        "isFlying": "boolean",
+        "allowFlying": "boolean",
+        "isCreativeMode": "boolean",
+        "allowEdit": "boolean",
+        "flySpeed": "float",
+        "walkSpeed": "float"
+      },
+      "methods": {
+        "getFlySpeed": {
+          "params": [],
+          "returnType": "float"
+        },
+        "setFlySpeed": {
+          "params": ["float"],
+          "returnType": "void"
+        },
+        "getWalkSpeed": {
+          "params": [],
+          "returnType": "float"
+        },
+        "setPlayerWalkSpeed": {
+          "params": ["float"],
+          "returnType": "void"
+        }
+      }
+    },
+    "PlayerCapabilities": {
+      "obf": "net.minecraft.entity.player.PlayerCapabilities"
+    },
+    "net.minecraft.nbt.NBTTagCompound": {
+      "fields": {
+        "tagMap": "Map"
+      },
+      "methods": {
+        "setTag": {
+          "params": ["String", "Object"],
+          "returnType": "void"
+        },
+        "setByte": {
+          "params": ["String", "byte"],
+          "returnType": "void"
+        },
+        "setShort": {
+          "params": ["String", "short"],
+          "returnType": "void"
+        },
+        "setInteger": {
+          "params": ["String", "int"],
+          "returnType": "void"
+        },
+        "setLong": {
+          "params": ["String", "long"],
+          "returnType": "void"
+        },
+        "setFloat": {
+          "params": ["String", "float"],
+          "returnType": "void"
+        },
+        "setDouble": {
+          "params": ["String", "double"],
+          "returnType": "void"
+        },
+        "setString": {
+          "params": ["String", "String"],
+          "returnType": "void"
+        },
+        "setBoolean": {
+          "params": ["String", "boolean"],
+          "returnType": "void"
+        },
+        "getTag": {
+          "params": ["String"],
+          "returnType": "Object"
+        },
+        "hasKey": {
+          "params": ["String"],
+          "returnType": "boolean"
+        },
+        "removeTag": {
+          "params": ["String"],
+          "returnType": "void"
+        }
+      }
+    },
+    "NBTTagCompound": {
+      "obf": "net.minecraft.nbt.NBTTagCompound"
+    },
+    "net.minecraft.util.MovementInput": {
+      "fields": {
+        "moveStrafe": "float",
+        "moveForward": "float",
+        "jump": "boolean",
+        "sneak": "boolean"
+      },
+      "methods": {
+        "updatePlayerMoveState": {
+          "params": [],
+          "returnType": "void"
+        }
+      }
+    },
+    "MovementInput": {
+      "obf": "net.minecraft.util.MovementInput"
+    },
+    "net.minecraft.util.FoodStats": {
+      "fields": {
+        "foodLevel": "int",
+        "foodSaturationLevel": "float",
+        "foodExhaustionLevel": "float",
+        "foodTimer": "int",
+        "prevFoodLevel": "int"
+      },
+      "methods": {
+        "addStats": {
+          "params": ["int", "float"],
+          "returnType": "void"
+        },
+        "onUpdate": {
+          "params": ["EntityPlayer"],
+          "returnType": "void"
+        },
+        "getFoodLevel": {
+          "params": [],
+          "returnType": "int"
+        },
+        "needFood": {
+          "params": [],
+          "returnType": "boolean"
+        }
+      }
+    },
+    "FoodStats": {
+      "obf": "net.minecraft.util.FoodStats"
+    }
+  }
+}

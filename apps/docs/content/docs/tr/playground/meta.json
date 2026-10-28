@@ -1,0 +1,10 @@
+{
+  "title": "Simülasyon",
+  "pages": [
+    "os-simulation",
+    "command-prompt",
+    "win64-debugger",
+    "memory-scanner",
+    "debugger-component"
+  ]
+}

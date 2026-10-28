@@ -1,0 +1,55 @@
+{
+  "name": "bun-minhook",
+  "version": "0.6.4",
+  "description": "MinHook-style trampoline/detour function hooking for Bun. Unlike nhook (no allocation, 2-byte inline patch), this builds a real relocated trampoline and installs a 5-byte JMP detour, with the detour itself supplied as caller-provided machineCode for cross-process use.",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "exoproc",
+    "hook",
+    "minhook",
+    "trampoline",
+    "detour",
+    "windows",
+    "x64",
+    "systems-instrumentation",
+    "function-hooking"
+  ],
+  "author": "Serkan",
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  },
+  "dependencies": {
+    "bun-winapi": "workspace:*",
+    "bun-xffi": "workspace:*",
+    "exoproc-utils": "workspace:*",
+    "bun-capstone": "workspace:*"
+  }
+}

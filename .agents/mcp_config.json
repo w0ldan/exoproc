@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "exoproc": {
+      "command": "bun",
+      "args": ["x", "exoproc", "mcp"]
+    }
+  }
+}

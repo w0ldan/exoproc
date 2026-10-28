@@ -1,0 +1,118 @@
+---
+title: 'Agent Bridge vs. Pure JNI Bridge'
+description: 'Architectural comparison between zero-injection JNI reflection and high-throughput in-process Agent RPC, including thread delegation.'
+---
+
+Exoproc provides two distinct operational bridges to interact with target Java Virtual Machines:
+
+1. **`ReflectionBridge` (Pure JNI):** Zero-injection, completely stealthy, driven cross-process via `jvm.dll` VTable calls.
+2. **`AgentReflectionBridge` (In-Process Agent):** High-throughput, low-latency in-memory agent running an embedded HTTP/RPC server inside the JVM.
+
+```text
+                        ┌─────────────────────────────────┐
+                        │   TypeScript / Bun Automation   │
+                        └────────────────┬────────────────┘
+                                         │
+                 ┌───────────────────────┴───────────────────────┐
+                 ▼                                               ▼
+     ┌───────────────────────┐                       ┌───────────────────────┐
+     │   ReflectionBridge    │                       │  AgentReflectionBridge│
+     │      (Pure JNI)       │                       │   (In-Process Agent)  │
+     └───────────┬───────────┘                       └───────────┬───────────┘
+                 │ Cross-Process Memory                          │ Loopback HTTP / Binary RPC
+                 ▼                                               ▼
+     ┌───────────────────────┐                       ┌───────────────────────┐
+     │  jvm.dll JNIEnv Table │                       │   Exoproc Agent       │
+     │  (VTable Invocation)  │                       │ (In-Memory defineClass│
+     └───────────┬───────────┘                       └───────────┬───────────┘
+                 │                                               │
+                 └───────────────────────┬───────────────────────┘
+                                         ▼
+                            ┌─────────────────────────┐
+                            │    Target JVM Memory    │
+                            │   (Minecraft / Game)    │
+                            └─────────────────────────┘
+```
+
+## Detailed Comparison
+
+| Criterion                | ReflectionBridge (Pure JNI)                                                  | AgentReflectionBridge (Agent)                                                        |
+| ------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| **Injected Code**        | **Zero.** No DLL, no JAR on disk, no code injected into target memory.       | **In-memory byte array.** Injected via `ClassLoader.defineClass`. No disk files.     |
+| **Stealth & Anti-Cheat** | **Maximum.** The target process contains no foreign threads or modules.      | **High.** Leaves no disk artifacts; runs as regular Java threads.                    |
+| **Call Latency**         | ~0.2 - 0.5 ms per call (IPC cross-process memory marshalling).               | ~0.02 - 0.05 ms per call (in-process direct JNI / local loopback).                   |
+| **Throughput**           | ~2,000 - 5,000 calls / sec.                                                  | **50,000+ calls / sec.**                                                             |
+| **Thread Delegation**    | Requires `nthread` RIP redirection.                                          | Native Java thread scheduling via `Java.runOn(executor, fn)`.                        |
+| **Best For**             | Initial inspection, stealth probing, anti-cheat targets, one-off automation. | Real-time gaming automation, tick listeners, bot navigation, continuous state loops. |
+
+---
+
+## 1. Pure JNI: `ReflectionBridge`
+
+`ReflectionBridge` operates by querying the target process's memory space for `jvm.dll`, locating the active `JavaVM` instance via `JNI_GetCreatedJavaVMs`, and attaching a cross-process thread context:
+
+```typescript
+import { Process } from 'bun-winapi';
+import { RemoteCallableMemoryAccessor } from 'bun-xffi';
+import { attachJvm, createJavaContext } from 'bun-njava';
+
+const proc = Process.findByName('javaw.exe');
+const memory = new RemoteCallableMemoryAccessor(proc.pid);
+
+// Attach pure JNI bridge
+const bridge = await attachJvm(memory);
+const Java = createJavaContext(bridge);
+
+// Read any field without modifying the target JVM
+const Minecraft = Java.type('net.minecraft.client.Minecraft');
+console.log('Player name:', Minecraft.getMinecraft().thePlayer.getName());
+```
+
+---
+
+## 2. In-Process Agent: `AgentBridge`
+
+When high-frequency interaction is required (such as scanning 200 nearby entities every 50ms game tick), `ReflectionBridge` can dynamically elevate itself to `AgentBridge`:
+
+```typescript
+// Seamless in-memory transition
+const agentJava = await Java.transitionToAgent();
+
+// All calls now execute through in-process agent RPC at native speeds
+const entities = agentJava.type('net.minecraft.client.Minecraft').getMinecraft()
+  .theWorld.loadedEntityList;
+```
+
+### Diskless Agent Loading
+
+The agent is never written as a `.jar` file on disk. Exoproc compiles and packages `Exoproc.java` into an in-memory byte buffer via `buildAgentJar()`:
+
+```typescript
+import { buildAgentJar, loadAgent } from 'njava-agent';
+
+// Build in-memory JAR
+const agentBytes = await buildAgentJar();
+
+// Load directly into the target process's JVM system classloader
+await loadAgent(memory, agentBytes);
+```
+
+---
+
+## Thread Delegation: `Java.runOn()`
+
+One of the greatest challenges in game instrumentation is thread safety. Modifying game state (such as moving the player, opening inventory screens, or interacting with blocks) from an external asynchronous thread causes `ConcurrentModificationException` or game crashes.
+
+`Java.runOn` delegates execution directly onto the application's main thread (e.g., Minecraft's render loop or tick thread):
+
+```typescript
+const Minecraft = Java.type('net.minecraft.client.Minecraft');
+const mc = Minecraft.getMinecraft();
+
+// Run code synchronously on the Minecraft main thread
+await Java.runOn(mc, () => {
+  // Safe from ConcurrentModificationException
+  mc.thePlayer.jump();
+  mc.thePlayer.sendChatMessage('/spawn');
+});
+```

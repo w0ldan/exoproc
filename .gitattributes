@@ -1,0 +1,4 @@
+# Keep GitHub language stats focused on source
+*.js linguist-generated
+*.mjs linguist-generated
+*.cjs linguist-generated

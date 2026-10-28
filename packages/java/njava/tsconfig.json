@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {},
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"],
+  "references": [
+    { "path": "../../utils" },
+    { "path": "../../win32/api" },
+    { "path": "../../xffi" },
+    { "path": "../jjit" },
+    { "path": "../agent" },
+    { "path": "../mappings" }
+  ]
+}

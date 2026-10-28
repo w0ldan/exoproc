@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        width: 1400px;
+        height: 860px;
+        background: #07090e;
+        background-image:
+          radial-gradient(
+            circle at 15% 20%,
+            rgba(99, 102, 241, 0.12) 0%,
+            transparent 40%
+          ),
+          radial-gradient(
+            circle at 85% 80%,
+            rgba(14, 165, 233, 0.1) 0%,
+            transparent 40%
+          ),
+          radial-gradient(
+            circle at 50% 50%,
+            rgba(168, 85, 247, 0.05) 0%,
+            transparent 60%
+          );
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+          Arial, sans-serif;
+        color: #e2e8f0;
+        overflow: hidden;
+      }
+
+      .header-tagline {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 22px;
+      }
+
+      .pill {
+        background: rgba(99, 102, 241, 0.15);
+        border: 1px solid rgba(99, 102, 241, 0.35);
+        color: #a5b4fc;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        padding: 6px 14px;
+        border-radius: 9999px;
+      }
+
+      .pill-green {
+        background: rgba(16, 185, 129, 0.15);
+        border: 1px solid rgba(16, 185, 129, 0.35);
+        color: #6ee7b7;
+      }
+
+      .pill-cyan {
+        background: rgba(6, 182, 212, 0.15);
+        border: 1px solid rgba(6, 182, 212, 0.35);
+        color: #67e8f9;
+      }
+
+      .terminal {
+        width: 1280px;
+        height: 700px;
+        background: #0b0f19;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        box-shadow:
+          0 25px 60px -15px rgba(0, 0, 0, 0.85),
+          0 0 40px -10px rgba(99, 102, 241, 0.2);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      }
+
+      .terminal-bar {
+        height: 42px;
+        background: #0f1422;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        justify-content: space-between;
+      }
+
+      .window-buttons {
+        display: flex;
+        gap: 8px;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .dot-red {
+        background: #ef4444;
+      }
+      .dot-yellow {
+        background: #f59e0b;
+      }
+      .dot-green {
+        background: #10b981;
+      }
+
+      .window-title {
+        font-size: 13px;
+        color: #94a3b8;
+        font-weight: 500;
+        letter-spacing: 0.3px;
+      }
+
+      .window-stats {
+        font-size: 11px;
+        color: #64748b;
+      }
+
+      .terminal-body {
+        padding: 24px 28px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #cbd5e1;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .prompt-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .prompt-symbol {
+        color: #38bdf8;
+        font-weight: 700;
+      }
+
+      .user-input {
+        color: #f1f5f9;
+        font-weight: 600;
+      }
+
+      .agent-thinking {
+        color: #94a3b8;
+        font-style: italic;
+        font-size: 13px;
+        padding-left: 18px;
+        border-left: 2px solid #334155;
+      }
+
+      .tool-block {
+        background: rgba(15, 23, 42, 0.7);
+        border: 1px solid rgba(51, 65, 85, 0.5);
+        border-radius: 8px;
+        padding: 12px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .tool-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13px;
+      }
+
+      .tool-name {
+        color: #818cf8;
+        font-weight: 700;
+      }
+
+      .tool-status {
+        color: #34d399;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .tool-details {
+        font-size: 12.5px;
+        color: #94a3b8;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 16px;
+      }
+
+      .label {
+        color: #64748b;
+      }
+      .val {
+        color: #f8fafc;
+        font-weight: 500;
+      }
+      .val-addr {
+        color: #38bdf8;
+        font-weight: 500;
+      }
+      .val-highlight {
+        color: #fbbf24;
+        font-weight: 500;
+      }
+
+      .hex-dump {
+        background: #05070c;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-size: 12px;
+        color: #94a3b8;
+        letter-spacing: 0.5px;
+        margin-top: 4px;
+      }
+
+      .hex-addr {
+        color: #64748b;
+      }
+      .hex-bytes {
+        color: #cbd5e1;
+      }
+      .hex-ascii {
+        color: #38bdf8;
+        font-weight: 600;
+      }
+
+      .bottom-bar {
+        margin-top: 6px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .success-banner {
+        color: #34d399;
+        font-size: 13px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .architecture-badges {
+        display: flex;
+        gap: 8px;
+      }
+
+      .mini-badge {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #94a3b8;
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header-tagline">
+      <div class="pill">Exoproc MCP · Live Windows x64 Instrumentation</div>
+      <div class="pill pill-green">0 DLL Injection</div>
+      <div class="pill pill-cyan">No CreateRemoteThread</div>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="window-buttons">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+        </div>
+        <div class="window-title">
+          claude-code — exoproc-mcp session (stdio)
+        </div>
+        <div class="window-stats">Win32 x64 · PID 4120 · 22 MCP Tools</div>
+      </div>
+
+      <div class="terminal-body">
+        <div class="prompt-row">
+          <span class="prompt-symbol">&gt;</span>
+          <span class="user-input"
+            >Attach to PID 4120. Find SetWindowTextW, install a 5-byte MinHook
+            detour, and trace incoming buffer arguments.</span
+          >
+        </div>
+
+        <div class="agent-thinking">
+          Claude is calling exoproc MCP tools to inspect PID 4120, resolve
+          user32 exports, and install relative trampoline detours...
+        </div>
+
+        <div class="tool-block">
+          <div class="tool-header">
+            <span class="tool-name"
+              >[mcp: exoproc] open_accessor(pid: 4120)</span
+            >
+            <span class="tool-status">✓ CONNECTED</span>
+          </div>
+          <div class="tool-details">
+            <div>
+              <span class="label">Target:</span>
+              <span class="val">notepad.exe (x64)</span>
+            </div>
+            <div>
+              <span class="label">Hijack Strategy:</span>
+              <span class="val">nthread (SetThreadContext + sleep stub)</span>
+            </div>
+            <div>
+              <span class="label">Primary Thread:</span>
+              <span class="val-addr">TID 8842</span>
+            </div>
+            <div>
+              <span class="label">State:</span>
+              <span class="val">Zero DLLs injected, handle acquired</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tool-block">
+          <div class="tool-header">
+            <span class="tool-name"
+              >[mcp: exoproc] minhook_install(target:
+              "user32.dll!SetWindowTextW", detour: JIT_RELAY)</span
+            >
+            <span class="tool-status">✓ HOOK ACTIVE</span>
+          </div>
+          <div class="tool-details">
+            <div>
+              <span class="label">Target Address:</span>
+              <span class="val-addr">0x7FFA89B21440</span>
+            </div>
+            <div>
+              <span class="label">Original Prologue:</span>
+              <span class="val">48 89 5C 24 08 (mov [rsp+8], rbx)</span>
+            </div>
+            <div>
+              <span class="label">Trampoline (Near Alloc):</span>
+              <span class="val-addr">0x7FFA89B30000</span> (rel32 delta:
+              +0xEBC0)
+            </div>
+            <div>
+              <span class="label">Far-Relay Gateway:</span>
+              <span class="val-highlight">Active</span> (14-byte qword absolute
+              jump)
+            </div>
+          </div>
+        </div>
+
+        <div class="tool-block">
+          <div class="tool-header">
+            <span class="tool-name"
+              >[mcp: exoproc] read_memory(address: 0x0000021A8F002140, size:
+              48)</span
+            >
+            <span class="tool-status">✓ BUFFER INTERCEPTED</span>
+          </div>
+          <div class="hex-dump">
+            <span class="hex-addr">0x0000021A8F002140: </span>
+            <span class="hex-bytes"
+              >45 00 78 00 6F 00 70 00 72 00 6F 00 63 00 20 00 4C 00 69 00 76 00
+              65 00</span
+            >
+            &nbsp;|&nbsp;<span class="hex-ascii">E.x.o.p.r.o.c. .L.i.v.e.</span
+            ><br />
+            <span class="hex-addr">0x0000021A8F002158: </span>
+            <span class="hex-bytes"
+              >49 00 6E 00 73 00 74 00 72 00 75 00 6D 00 65 00 6E 00 74 00 61 00
+              74 00</span
+            >
+            &nbsp;|&nbsp;<span class="hex-ascii">I.n.s.t.r.u.m.e.n.t.a.t.</span>
+          </div>
+        </div>
+
+        <div class="bottom-bar">
+          <div class="success-banner">
+            <span>●</span> Claude successfully detoured live API and intercepted
+            parameters without restarting the target process
+          </div>
+          <div class="architecture-badges">
+            <div class="mini-badge">TinyCC JIT</div>
+            <div class="mini-badge">MinHook rel32</div>
+            <div class="mini-badge">nthread x64</div>
+            <div class="mini-badge">stdio MCP</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

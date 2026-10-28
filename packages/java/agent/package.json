@@ -1,0 +1,62 @@
+{
+  "name": "njava-agent",
+  "version": "0.6.4",
+  "description": "Universal dynamic in-process Java instrumentation agent and headless reflection bridge builder.",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./loader": {
+      "types": "./dist/loader.d.ts",
+      "import": "./dist/loader.js"
+    },
+    "./agent-builder": {
+      "types": "./dist/agent-builder.d.ts",
+      "import": "./dist/agent-builder.js"
+    },
+    "./jar": {
+      "types": "./dist/jar.d.ts",
+      "import": "./dist/jar.js"
+    },
+    "./agent-class-builder": {
+      "types": "./dist/agent-class-builder.d.ts",
+      "import": "./dist/agent-class-builder.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "bun build ./src/index.ts ./src/agent-builder.ts ./src/agent-sources.ts ./src/agent-class-builder.ts ./src/loader.ts ./src/jar.ts --outdir ./dist --target bun && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "bun test"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "exoproc",
+    "njava",
+    "agent",
+    "jvm",
+    "java",
+    "instrumentation",
+    "reflection",
+    "universal"
+  ],
+  "author": "Serkan",
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "dependencies": {
+    "exoproc-jjit": "workspace:*",
+    "exoproc-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

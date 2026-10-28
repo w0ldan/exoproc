@@ -1,0 +1,64 @@
+---
+title: Win64 debugger component API
+description: "Win64Debugger component'inin prop arayüzü ve tasarım kararları"
+---
+
+`Win64Debugger`, OS launcher'dan bağımsızdır. Component'in ihtiyaç duyduğu iki temel prop vardır:
+
+```ts
+interface Win64DebuggerProps {
+  process: Win64Process;
+  thread: Win64Thread;
+  initialMemoryMappingId?: string;
+  initialMemoryAddress?: string;
+  initialMemoryLength?: number;
+  /** Sabit yükseklik yerine kapsayıcıyı flex ile doldurur. */
+  fullscreen?: boolean;
+  /** Gömülü (fullscreen olmayan) yüzeyin yüksekliği. */
+  height?: number | string;
+}
+```
+
+```tsx
+<Win64Debugger
+  process={process}
+  thread={thread}
+  initialMemoryMappingId="process-heap"
+  initialMemoryAddress="0x000001F400000000"
+  initialMemoryLength={128}
+/>
+```
+
+Component gerçek bir VS Code düzeni sunar: paneller [`dockview`](https://dockview.dev) ile yönetilir, yani her panel **sürükle-bırakla taşınabilir**, başka bir panelin üzerine bırakılınca **sekme olarak birleşir**, grup sınırlarından **yeniden boyutlandırılabilir**. Başlangıç şablonu şu gruplarla gelir (hepsi yeniden düzenlenebilir):
+
+- **DISASSEMBLY** grubu: byte kolonu + Monaco disassembly aynı panelde (gutter breakpoint'leri, current-line highlight) — tek panel olduğu için birlikte taşınır.
+- **SIDEBAR** grubu: **Registers** / **Call Stack** / **Breakpoints**, gerçek VS Code'daki "Run and Debug" yan panelinde olduğu gibi tek panelde katlanabilir bölümler halinde.
+- Alt grup: **Memory** (`process.memory` üzerinden okunan ayarlanabilir hex+ASCII görünüm), **Trace** (çalışmış instruction geçmişi), **Tarayıcı** (`Win64MemoryScanner` üzerine kurulu Cheat Engine tarzı tarama döngüsü, bkz. [Bellek tarayıcı](/docs/playground/memory-scanner)) ve **Terminal** (bkz. aşağı) gerçek dockview sekmeleri olarak.
+
+Bir grupta tek panel kalınca sekme başlığı otomatik gizlenir (`group.header.hidden`, panel sayısı değiştikçe yeniden hesaplanır) — tek dosya varken isim göstermeye gerek yok.
+
+Tarayıcı ve genel debug state'i panellerin kendisinde değil `Win64Debugger` içinde (`useScannerSession`, `useDebugSession`) tutulur ve bir React Context ile panellere akar (`DebuggerContext.tsx`) — dockview panel içerikleri `ReactDOM.createPortal` ile monte edilir ve dockview'ın kendi `params` mekanizması `updateParameters()` çağrılmadıkça donuk kalır, ama portal Context'i kırmaz; böylece sekmeler arasında geçiş yapmak veya panelleri sürüklemek, birkaç taramada daraltılmış aday kümesini ya da debug state'ini yok etmez.
+
+## Terminal paneli
+
+Alt gruptaki **TERMINAL** sekmesi [xterm.js](https://xtermjs.org) ile render edilen gerçek bir simüle `cmd.exe` oturumudur — debug edilen process'ten bağımsız, aynı `Win64Machine` içinde kendi PID'iyle yaşayan ayrı bir process. `Win32CommandPrompt` (`win32-simulate`) cmd.exe'yi gerçek loader path'iyle açar; `ConsoleScreenPresenter` konsol framebuffer'ını ANSI SGR koduyla xterm'e basar. Klavye girişi satır bazlı çalışır: yazarken yerel yankı yapılır, Enter'a basınca satır `commandPrompt.execute(line)` ile motora gider. Gerçek bir kesme (`Ctrl+C`) semantiği yoktur — sadece gönderilmemiş satırı temizler.
+
+## Breakpoint mekanizması
+
+Breakpoint'ler `thread.cpu.breakpoints` (`Set<bigint>`) üzerinde yönetilir. Gutter'a tıklandığında component `thread.cpu.addBreakpoint(address)` / `thread.cpu.removeBreakpoint(address)` çağırır. Continue sırasında her adımdan önce RIP breakpoint kümesinde kontrol edilir; eşleşme varsa yürütme durur.
+
+Step Into ve Step Over breakpoint kontrolü yapmaz -- her zaman tam olarak bir instruction (veya Step Over için CALL sonrasına kadar) ilerler.
+
+## Step Over davranışı
+
+Step Over, şu anki instruction bir `CALL` ise instruction'dan sonraki adrese geçici breakpoint koyar ve Continue mantığıyla çalıştırır. CALL olmayan instruction'larda Step Into ile aynı davranır.
+
+## Neden scenario prop'u yok?
+
+Önceki component `instructions`, `registers`, `steps` ve `memoryWrites` dizileri alıyordu. Bu model öğretici bir animasyon üretse de CPU simülasyonu değildi; bir instruction çalışmadan register ve byte değiştirebiliyordu.
+
+Yeni component state üretmez. **Step Into** doğrudan `thread.step()` çağırır. Sonraki render'da görülen register ve memory farkları x64 interpreter'ın sonucudur.
+
+## Runtime bağımsızlığı
+
+Component `bun-nthread` veya başka bir Exoproc package'ını import etmez. Bağımlılığı yalnız `win32-simulate` içindeki runtime tipleridir. Başka bir sayfa process'i ister doğrudan oluştursun ister `bun:ffi` üzerinden açsın, aynı `Win64Process` ve `Win64Thread` nesneleri debugger'a verilebilir.

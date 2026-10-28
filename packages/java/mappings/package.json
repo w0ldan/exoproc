@@ -1,0 +1,41 @@
+{
+  "name": "exoproc-mappings",
+  "version": "0.6.4",
+  "description": "Pure TypeScript mapping database, matchmaking pool, and mappings.json I/O engine for the Exoproc / NJava ecosystem.",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "exoproc",
+    "njava",
+    "mappings",
+    "deobfuscation",
+    "pool",
+    "database"
+  ],
+  "author": "Serkan",
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

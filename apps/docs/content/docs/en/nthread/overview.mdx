@@ -1,0 +1,10 @@
+---
+title: 'Why NThread?'
+description: 'NThread temporarily redirects one existing OS thread in a target process instead of creating a remote thread. This avoids CreateRemoteThread; it...'
+---
+
+`NThread` temporarily redirects one existing OS thread in a target process instead of creating a remote thread. This avoids `CreateRemoteThread`; it does not mean no target allocation can occur, because middleware and stack-argument handling can allocate working memory or small stubs.
+
+For normal application code, use `createAccessor(pid)`. It races candidate threads, selects the first successful redirection, and returns the complete accessor chain. Direct `NThread` construction is an advanced path that makes lifecycle ownership your responsibility.
+
+NThread can run calls on a live target thread, read their result from context, and restore saved general-purpose, control, and XMM state during deinitialization. It cannot guarantee that a selected thread is safe to suspend, that it is not holding a lock, or that a call will return.

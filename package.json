@@ -1,0 +1,79 @@
+{
+  "name": "exoproc-monorepo",
+  "version": "0.6.10",
+  "private": true,
+  "description": "TypeScript toolkit for Windows x64 native systems programming, memory manipulation, and process instrumentation.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "packages/capstone/*",
+    "packages/win32/*",
+    "packages/java/*",
+    "apps/*"
+  ],
+  "keywords": [
+    "exoproc",
+    "monorepo",
+    "windows",
+    "x64",
+    "native",
+    "systems-programming",
+    "instrumentation",
+    "assembler",
+    "disassembler",
+    "memory-manipulation"
+  ],
+  "author": "Serkan",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  },
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "engines": {
+    "bun": ">=1.4.4"
+  },
+  "packageManager": "bun@1.4.4",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "build:clean": "bun run clean && bun run build",
+    "clean": "find . -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null; rm -rf dist-tests tests/dist; rm -f exoproc.js exoproc.tar.gz *.tgz packages/simulate/crt-*; find . -name '*.tsbuildinfo' -not -path '*/node_modules/*' -delete 2>/dev/null; true",
+    "deps": "bun -e \"import { downloadAllWorkspaceDeps } from 'exoproc-utils'; await downloadAllWorkspaceDeps(process.cwd());\"",
+    "mcp": "bun run packages/exoproc-mcp/dist/index.js",
+    "exoproc": "bun run packages/exoproc/dist/cli.js",
+    "setup": "bun run packages/exoproc/dist/cli.js setup",
+    "doctor": "bun run packages/exoproc/dist/cli.js doctor",
+    "typecheck": "bun check && bun check -p tests/tsconfig.json",
+    "lint": "bun check",
+    "lint:fix": "bun fmt",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
+    "test": "bun test tests/utils/ tests/exoproc/ tests/njava/compiler.test.ts tests/njava/remapper.test.ts",
+    "simulate:test": "bun --filter win32-simulate test:node",
+    "docs": "bun run --cwd apps/docs dev",
+    "docs:build": "bun run --cwd apps/docs build",
+    "bump": "bun run scripts/bump-changed.ts",
+    "bump:changed": "bun run scripts/bump-changed.ts",
+    "release": "bun run build && changeset publish --no-git-tag",
+    "prepare": "husky",
+    "postinstall": "bun run deps"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.1",
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
+    "@types/bun": "latest",
+    "chalk": "^5.3.0",
+    "dotenv": "^17.4.2",
+    "husky": "^9.0.11",
+    "typescript": "5.8.2",
+    "unzipper": "^0.12.3",
+    "winston": "^3.19.0"
+  },
+  "overrides": {
+    "mdast-util-to-markdown": "2.1.2"
+  }
+}

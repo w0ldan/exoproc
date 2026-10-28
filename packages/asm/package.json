@@ -1,0 +1,35 @@
+{
+  "name": "exoproc-asm",
+  "version": "0.6.4",
+  "description": "Dependency-free typed x64 assembler for Exoproc.",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test ../../tests/asm/assembler.test.ts"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "x64",
+    "assembler",
+    "machine-code",
+    "exoproc"
+  ]
+}

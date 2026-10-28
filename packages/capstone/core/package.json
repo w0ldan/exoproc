@@ -1,0 +1,58 @@
+{
+  "name": "bun-capstone",
+  "version": "0.6.5",
+  "description": "TypeScript/FFI bindings for the Capstone disassembly engine with full OOP support",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "dist",
+    "deps",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "capstone",
+    "disassembler",
+    "disassembly",
+    "x86",
+    "x86_64",
+    "reverse-engineering",
+    "binary-analysis",
+    "ffi",
+    "typescript",
+    "exoproc",
+    "win32",
+    "windows"
+  ],
+  "author": "Serkan",
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  },
+  "dependencies": {
+    "bun-capstone-abi": "workspace:*",
+    "bun-xffi": "workspace:*",
+    "exoproc-utils": "workspace:*"
+  }
+}

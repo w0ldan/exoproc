@@ -1,0 +1,16 @@
+---
+title: 'Design decisions'
+description: 'Making every Struct or CFunction choose local and remote APIs leaks transport details into higher layers. Accessors keep those details below a...'
+---
+
+## Why accessors?
+
+Making every `Struct` or `CFunction` choose local and remote APIs leaks transport details into higher layers. Accessors keep those details below a reusable common interface.
+
+## Why system stubs?
+
+For redirection, NThread finds small instruction sequences in loaded system modules: `EB FE`, `push reg; ret`, `jmp reg`, `ret`, and `add rsp, 0x28; ret`. This avoids placing one large fixed execution payload just to redirect a thread. It does not mean the whole system is allocation-free: accessor middleware and stack-argument cleanup can still allocate target memory.
+
+## Why two hook models?
+
+NHook patches two bytes with `EB FE`, parks entering threads, and lets the host process a hit. MinHook uses a five-byte relative jump and a relocated trampoline. The former depends on hit lifecycle and instruction simulation; the latter depends on relocation, near allocation, and a usable detour. Neither is a universal replacement for the other.

@@ -1,0 +1,134 @@
+---
+title: 'Java Stub Project & Virtual Workspace'
+description: 'Generating TypeScript declarations and compiling Java stubs on-the-fly with JavaStubProject and virtual Gradle-style workspaces.'
+---
+
+When developing injected Java code or complex automation scripts, compiling custom tasks requires access to the target application's class definitions (such as Minecraft's `Minecraft`, `EntityPlayerSP`, or `WorldClient`). However, original game JARs are often obfuscated, hundreds of megabytes in size, or inaccessible on the development host.
+
+Exoproc solves this with **`JavaStubProject`**, which generates clean, lightweight Java and TypeScript stubs from mapping schemas or live JVM reflection.
+
+```text
+Game Mappings / Live Reflection
+               │
+               ▼
+        JavaStubProject
+  ┌────────────────────────────────────┐
+  │  src/main/java/                    │  (Synthesized .java stubs)
+  │  build/classes/java/main/          │  (Compiled by embedded ECJ)
+  │  build/libs/stubs.jar              │  (Packaged classpath JAR)
+  │  typings/game.d.ts                 │  (TypeScript declarations)
+  └────────────────────────────────────┘
+               │
+      ┌────────┴────────┐
+      ▼                 ▼
+Classpath for     Full TypeScript
+compileJava()     IDE Autocomplete
+```
+
+## Creating a Virtual Workspace
+
+You can initialize a `JavaStubProject` in a temporary directory or in your project folder:
+
+```typescript
+import { JavaStubProject } from 'bun-njava';
+
+const project = new JavaStubProject({
+  javaVersion: 8,
+});
+
+console.log('Workspace directory:', project.workspaceDir);
+console.log('Target stub JAR:', project.jarPath);
+```
+
+## Adding Classes & Generating Source
+
+Classes can be registered using schema definitions or selected from known canonical game classes:
+
+```typescript
+// Register a class schema
+project.addClassSchema({
+  className: 'net.minecraft.client.Minecraft',
+  superClass: 'java.lang.Object',
+  interfaces: [],
+  fields: [
+    {
+      name: 'thePlayer',
+      type: 'net.minecraft.client.entity.EntityPlayerSP',
+      isStatic: false,
+    },
+    {
+      name: 'theWorld',
+      type: 'net.minecraft.client.multiplayer.WorldClient',
+      isStatic: false,
+    },
+  ],
+  methods: [
+    {
+      name: 'getMinecraft',
+      returnType: 'net.minecraft.client.Minecraft',
+      params: [],
+      isStatic: true,
+    },
+    { name: 'runTick', returnType: 'void', params: [], isStatic: false },
+  ],
+});
+
+// Synthesize Java source code into src/main/java/
+project.generateSources();
+```
+
+## Compiling and Building `stubs.jar`
+
+With a single call, `JavaStubProject` invokes the embedded ECJ compiler and packages the `.class` files into a compact JAR:
+
+```typescript
+// Compiles all stubs into build/libs/stubs.jar
+const result = await project.compile();
+
+if (result.success) {
+  console.log(`Successfully compiled stubs to ${project.jarPath}`);
+}
+```
+
+## Compiling Injected Code Against Stubs
+
+Once `stubs.jar` is generated, pass it as a classpath entry to `compileJava()`. Your custom injected classes can now inherit or reference game types without requiring the real Minecraft client:
+
+```typescript
+import { compileJava } from 'bun-njava';
+
+const myInjectedSource = `
+package org.exoproc.injected;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.EntityPlayerSP;
+
+public class ChatNotifier implements Runnable {
+    @Override
+    public void run() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.thePlayer != null) {
+            mc.thePlayer.sendChatMessage("Exoproc Bot Initialized.");
+        }
+    }
+}
+`;
+
+const buildResult = await compileJava({
+  source: myInjectedSource,
+  classpath: [project.jarPath], // Use the generated stub JAR!
+  javaVersion: 8,
+});
+```
+
+## Generating TypeScript `.d.ts` Declarations
+
+To achieve seamless autocomplete in your TypeScript scripts when calling `Java.type()`, generate declaration files:
+
+```typescript
+// Generate index.d.ts representing all registered Java types
+const dtsContent = project.generateTypeDeclarations();
+await Bun.write('types/minecraft.d.ts', dtsContent);
+```
+
+In your editor, `Java.type('net.minecraft.client.Minecraft').getMinecraft()` will now feature full parameter hints, property completions, and return types!

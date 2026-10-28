@@ -1,0 +1,98 @@
+---
+title: 'Sorun giderme'
+description: 'Bir hata mesajını tek başına değil, çağrının hangi aşamasında oluştuğuyla birlikte değerlendirin. NThread, accessor ve hook katmanları aynı...'
+---
+
+Bir hata mesajını tek başına değil, çağrının hangi aşamasında oluştuğuyla birlikte değerlendirin. NThread, accessor ve hook katmanları aynı process üzerinde çalıştığı için aynı `timeout` belirtisi farklı nedenlerden çıkabilir.
+
+## Başlatma hataları
+
+### `NoSleepAddressError` / `NoPushretAddressError` / `NoJumpAddressError`
+
+NThread'in ihtiyaç duyduğu küçük talimat stub'ları sistem modüllerinde bulunamadı veya tarama tamamlanmadan kullanıma geçildi.
+
+Kontrol sırası:
+
+1. Process'in Windows x64 olduğundan emin olun.
+2. `ntdll`, `kernel32` ve `kernelbase` modüllerinin hedefte yüklü olduğunu kontrol edin.
+3. Async başlatmada `await memory.init()` tamamlanmadan `call` yapılmadığını doğrulayın.
+4. Wine kullanıyorsanız Windows Bun sürümünü ve Wine prefix mimarisini kontrol edin.
+
+### Access denied
+
+Bu hata her zaman izin eksikliği anlamına gelmez. Hedef process kapanıyor olabilir, thread ID artık geçerli olmayabilir veya istenen Win32 erişim maskesi hedefin güvenlik politikasına uymuyor olabilir. Önce process/thread yaşamını, sonra erişim haklarını inceleyin.
+
+## Çağrı hataları
+
+### `CallTimeoutError`
+
+Hedef fonksiyon dönüş zinciriyle spin stub'a dönmedi. En yaygın nedenler:
+
+- fonksiyon uzun sürüyor veya bloke oluyor,
+- yanlış adres ya da yanlış calling convention kullanılıyor,
+- hedef thread lock/loader bölgesinde askıya alınmış durumda,
+- thread başka bir kod yolu tarafından sonlandırıldı,
+- hook veya başka bir suspend/resume sahibi ile suspend sayacı çakıştı.
+
+Timeout sonrasında aynı context'i tekrar yazmadan önce hedef thread'in `exit code`, `RIP` ve `RSP` durumunu okuyun. `timeoutMs` değerini yükseltmek yalnızca çağrının gerçekten uzun sürdüğü doğrulanmışsa anlamlıdır.
+
+### `CallThreadDiedError`
+
+Thread, çağrı sırasında öldü veya context okunamaz hale geldi. `ExitThread` veya noreturn fonksiyonları NThread çağrısı olarak kullanmayın. Hedefi yeniden başlatıp aynı çağrıyı daha küçük ve geri dönen bir fonksiyonla izole edin.
+
+### Stack mismatch uyarısı
+
+`expectedRsp` ayarlanmışsa bu denetim hem async `call()` hem `callSync()` dönüşünde yapılır. Çağrı sonrası gerçek `RSP`, beklenen değerden farklıysa yanlış ABI, eksik stack argümanı, çağrının stack'i değiştirmesi veya dönüş stub'ının beklenmeyen bir yoldan çalışması söz konusu olabilir. Uyarıyı görmezden gelip aynı thread'de art arda çağrılar yapmak bir sonraki `ret` sırasında crash'e dönüşebilir.
+
+## Hook hataları
+
+### Hook hit alınmıyor
+
+Hedef fonksiyon hiç çağrılmıyor olabilir; yanlış modül sürümündeki adres kullanılmış olabilir veya hook yanlış process'e yazılmış olabilir. Önce `originalBytes` ile hedefteki byte'ları ve process PID'sini doğrulayın.
+
+### Hook disable sonrası crash
+
+Disable sırasında park edilmiş thread'ler hâlâ eski `EB FE` konumunda olabilir veya özgün byte'lar tam talimat sınırında geri yüklenmemiş olabilir. `poll()` ile bekleyen hit'leri tüketin, `disable()` tamamlanmadan process'i kapatmayın ve `destroy()` çağrısını en sona bırakın.
+
+### MinHook detour çalışmıyor
+
+Detour adresi 32-bit relative jump sınırının dışında olabilir. MinHook bunu yakın relay ile çözmeye çalışır; relay allocation/protection başarısızsa hedefin adres alanını ve `allocNear` yeteneğini kontrol edin. Ayrıca detour machine-code'un hedef process'e gerçekten taşındığını doğrulayın.
+
+## Tanı için loglama
+
+Sorunu tekrar üretirken şu değerleri aynı çağrı için kaydedin:
+
+- hedef PID ve driving thread ID,
+- hedef fonksiyon adresi ve ilk byte'ları,
+- çağrı öncesi/sonrası `RIP`, `RSP`, `RCX`, `RDX`, `RAX`,
+- argüman türleri ve stack argümanı sayısı,
+- timeout sonucu ve thread exit durumu.
+
+Adresleri loglarken hex formatı kullanın; pointer değerlerini JavaScript `number` içine zorlayarak 64-bit hassasiyetini kaybetmeyin.
+
+## CI / Wine ortamı sorunları
+
+### Taze thread üzerinde `VirtualAlloc`/`malloc`/`fopen` güvenilir değil (yalnızca GitHub Actions)
+
+GitHub Actions'ın sanallaştırılmış Wine runner'larında (gerçek donanımda görülmez), az önce oluşturulmuş bir thread üzerinde çalıştırılan gerçek WinAPI/CRT çağrıları (`VirtualAlloc`, `malloc`, `fopen`, ...) güvenilir değildir — thread ister yerel ister uzak process'te olsun. `Native.Thread.create()` bozuk `lpParameter` iletir, yerel `VirtualAlloc` `ERROR_INVALID_PARAMETER` ile başarısız olur. Ayrıca `RemoteCallableMemoryAccessor.call()`/`callSync()`, `CreateRemoteThread`'i tek argümanlı (`lpParameter`) başlangıç rutini olarak kullandığından **birden fazla argümanla asla çağrılmamalı** — ikinci ve sonraki argümanlar sessizce düşer.
+
+**Çözüm:** gerçek bir process spawn edin (`new TestProcess()`), var olan bir thread'ini alın (`Native.Thread.getThreads(pid)[0]`) ve tüm çağrıları `IndirectNThreadHostAccessor(pid, tid)` üzerinden sürün. Bu, zaten canlı olan thread'in register context'ini hijack eder (`SetThreadContext`/`ResumeThread`), `CreateThread`/`CreateRemoteThread`/yerel `VirtualAlloc`'ı tamamen atlar. Gerçek bir thread'in hook'lanmış fonksiyona doğrudan girmesi gerekiyorsa argümanı `cmachinecode()` sarmalayıcısında derleme-zamanı literali olarak gömün (`lpParameter`'a güvenmeyin).
+
+### Tam yerel Wine suite'inde ara sıra Bun segfault'u
+
+`bun-wine test` bazen Bun'ın kendisini çökertebilir (Wine'a özgü, ~1/4-2/5 oranında). İki bilinen kök neden çözüldü:
+
+- **Double `CloseHandle`:** bir accessor `{ handle: tp.handle }` ile `TestProcess`'in handle'ını paylaşıp `closeHandle: false` geçmezse, hem accessor hem `tp.stop()` aynı handle'ı kapatır — Wine altında fatal. Kural: `tp.handle`'ı paylaşan her accessor `closeHandle: false` almalı (ya da handle'ı hiç paylaşmayıp accessor'ın kendi `OpenProcess`'ini kullanmasına izin verin).
+- **`RemoteCallableMemoryAccessor` argüman düşürme:** yukarıdaki maddeyle aynı kök neden — birden fazla argümanlı bir çağrı `CreateRemoteThread`'in tek `lpParameter` slotundan geçirilince ikinci argüman register çöpü olarak kalır ve sayfa hatasına yol açabilir. `IndirectNThreadHostAccessor`'a taşıyın.
+
+### Cross-package `src/` importları eski `dist/` derlemesine düşebilir
+
+Her paketin `package.json` `"main"`'i `./dist/index.js`'e işaret eder, `./src/index.ts`'e değil. `tests/` içindeki dosyalar tsconfig `paths` üzerinden canlı `src/`'i görür, ama bir paketin kendi kaynak kodu başka bir paketi import ederken (`packages/nthread/src/*.ts`'ten `bun-xffi` import etmek gibi) `node_modules` symlink'i üzerinden **derlenmiş** `dist/`'e düşer. **`packages/*/src/` içinde başka bir paketin import ettiği bir dosyayı değiştirdikten sonra, o paketi tüketen bir Wine testine güvenmeden önce `bun run build` çalıştırın** — temiz typecheck/lint bunu garanti etmez, çünkü ikisi de her zaman canlı `src/`'i görür.
+
+### Başka bir paketten gelen sınıfa karşı `instanceof` Wine altında güvenilmez
+
+Bun'ın izole linker'ı her tüketici pakete kendi `node_modules/<dep>` symlink'ini verir (hepsi aynı dizine işaret etse de). `bun.exe` Wine altında her farklı symlink yolunu ayrı bir modül örneği olarak değerlendirir, bu yüzden farklı paketlerden import edilen aynı sınıf `instanceof` ile eşleşmeyebilir. Bunun yerine `instance.constructor.name` ile isim bazlı kontrol yapın. Kod altında inşa edilen sınıfla aynı pakette tanımlı sınıflara karşı `instanceof` (ör. `IndirectNThreadHostAccessor`) güvenilirdir — risk yalnızca farklı bir pakette yaşayan sınıflarda.
+
+### Testler hiç çıktı vermeden asılı kalıyorsa: önceki çalışmadan kalan process
+
+`bun-wine test` sıfır stdout ile sonsuza kadar asılı kalabilir. Genellikle önceki bir çalışmanın `bun.exe`'si çökmüş/kesilmiş ama spawn ettiği `ping.exe` çocuğu hâlâ yaşıyordur; bu process `bun.exe`'nin stdout pipe'ına handle tutar ve yeni çalışmanın çıktısı hiç EOF almaz. `ps -eo pid,ppid,stat,etime,pcpu,cmd | grep -iE "wine|ping.exe"` ile önceki çalışmadan kalan process'leri bulup `kill -9` edin (yüksek CPU'da takılı kalanlar Wine scheduler'ını açlığa sürükleyip alakasız testlerde bile timeout'a yol açar).

@@ -1,0 +1,4 @@
+{
+  "title": "Architecture",
+  "pages": ["overview", "decisions", "accessors", "windows-x64-abi"]
+}

@@ -1,0 +1,53 @@
+{
+  "name": "bun-nshm",
+  "version": "0.6.4",
+  "description": "Cross-process shared memory for Bun via a dummy-process handle relay — the caller never OpenProcess's the target directly.",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "exoproc",
+    "shared-memory",
+    "windows",
+    "x64",
+    "native",
+    "handle-relay",
+    "cross-process",
+    "systems-instrumentation"
+  ],
+  "author": "Serkan",
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  },
+  "dependencies": {
+    "bun-xffi": "workspace:*",
+    "exoproc-dummy": "workspace:*",
+    "exoproc-utils": "workspace:*"
+  }
+}

@@ -1,0 +1,118 @@
+---
+title: "Java.type ve Dinamik Sınıf Proxy'leri"
+description: 'Java.type() ile hedef JVM sınıflarına erişim, dinamik nesne üretimi, aşırı yüklenmiş metodların çözümlenmesi ve alan erişimi.'
+---
+
+`Java.type(className)` fonksiyonu, hedef JVM içindeki herhangi bir Java sınıfına ait bir **Dinamik Sınıf Proxy'si** (`JavaClassProxy`) üretir. Nashorn ve GraalJS sözdizimine tam uyumludur.
+
+Elde edilen sınıf proxy'si üzerinden nesne örneği oluşturabilir, statik ve üye metodları çağırabilir, alanları (fields) okuyup yazabilir ve yansıma meta verilerine erişebilirsiniz.
+
+## Sınıf Yükleme ve Örnek Oluşturma
+
+Hedef sınıfa tam adıyla (veya eşleme kayıtlıysa deobfuscated adıyla) erişilir:
+
+```typescript
+// Java sınıf proxy'sini al
+const ArrayList = Java.type('java.util.ArrayList');
+
+// 1. "new" anahtar kelimesi ile örnek oluşturma
+const list1 = new ArrayList();
+
+// 2. Fonksiyon çağrısı biçiminde örnek oluşturma (Nashorn stili)
+const list2 = ArrayList(10); // Başlangıç kapasitesi 10 olan liste
+```
+
+### Otomatik Yapıcı Aşırı Yükleme (Constructor Overload Matching)
+
+Java sınıflarında birden fazla yapıcı (constructor) tanımlandığında, Exoproc argümanların türlerini ve sayılarını analiz ederek hedef JVM'deki en uygun yapıcıyı otomatik olarak seçer:
+
+```typescript
+const File = Java.type('java.io.File');
+
+// File(String pathname) çağrılır
+const file1 = new File('C:\\temp\\log.txt');
+
+// File(String parent, String child) çağrılır
+const file2 = new File('C:\\temp', 'data.bin');
+```
+
+## Metod Çağrıları ve Aşırı Yükleme Çözümlemesi
+
+Sınıf proxy'leri hem statik hem de üye metod çağrılarını şeffaf bir şekilde yönetir:
+
+```typescript
+const Math = Java.type('java.lang.Math');
+
+// Statik metod çağrısı
+const maxVal = Math.max(10, 25); // 25
+const sinVal = Math.sin(1.57);
+
+// Üye metod çağrısı
+const list = new ArrayList();
+list.add('İlk Öğe');
+list.add('İkinci Öğe');
+console.log(list.size()); // 2
+console.log(list.get(0)); // 'İlk Öğe'
+```
+
+Exoproc'un aşırı yükleme algoritması (`matchMethodOverload`):
+
+- İlkel tipleri (`int`, `long`, `boolean`, `double`, vb.) ve bunların sarmalayıcılarını (`Integer`, `Long`, vb.) ayrıştırır.
+- String, nesne ve dizi parametrelerini tanır.
+- En dar ve en uygun eşleşmeyi belirleyerek hedefte doğru JNI metod kimliğini (`jmethodID`) çalıştırır.
+
+## Alan (Field) Erişimi
+
+Nesne ve sınıf alanları, standart JavaScript özellik erişimi (`.` operatörü) ile okunabilir ve değiştirilebilir:
+
+```typescript
+const Point = Java.type('java.awt.Point');
+const pt = new Point(10, 20);
+
+// Alan okuma
+console.log(pt.x); // 10
+console.log(pt.y); // 20
+
+// Alan yazma (doğrudan JVM belleğinde güncellenir)
+pt.x = 99;
+console.log(pt.x); // 99
+
+// Statik alanlar
+const Integer = Java.type('java.lang.Integer');
+console.log(Integer.MAX_VALUE); // 2147483647
+```
+
+## İç Sınıflar (Nested / Inner Classes)
+
+İç sınıflara hem JVM standart gösterimi olan `$` işaretiyle hem de nesne hiyerarşisi üzerinden erişilebilir:
+
+```typescript
+// Standart JVM gösterimi
+const Entry = Java.type('java.util.Map$Entry');
+
+// Veya dış sınıf üzerinden doğrudan erişim
+const Map = Java.type('java.util.Map');
+const InnerEntry = Map.Entry;
+```
+
+## Yansıma Meta Verileri ve Pointer Açma
+
+Her sınıf ve nesne proxy'si kendi yansıma bilgilerini taşır:
+
+```typescript
+const StringClass = Java.type('java.lang.String');
+
+console.log(StringClass.name); // "java.lang.String"
+console.log(StringClass.superclass); // java.lang.Object proxy'si
+console.log(StringClass.class.getName()); // "java.lang.String"
+```
+
+Düşük seviyeli JNI veya bellek erişimlerinde ham 64-bit işaretçiye (`jobject` veya `jclass`) ihtiyaç duyarsanız `Java.unwrap()` kullanabilirsiniz:
+
+```typescript
+import { unwrapJava } from 'bun-njava';
+
+const rawPtr: bigint = Java.unwrap(myInstance);
+// veya
+const rawPtrDirect: bigint = myInstance.$ptr;
+```
