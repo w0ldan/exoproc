@@ -8,6 +8,7 @@
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"],
   "references": [
+    { "path": "../../ipc" },
     { "path": "../../utils" },
     { "path": "../../win32/api" },
     { "path": "../../xffi" },

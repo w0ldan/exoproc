@@ -1,6 +1,6 @@
 {
   "name": "exoproc-runner",
-  "version": "0.6.6",
+  "version": "0.7.0",
   "description": "Contextual execution runner and ambient accessor environment for Windows x64 reverse engineering, Win32 calls, and automation scripts.",
   "main": "./dist/index.js",
   "exports": {

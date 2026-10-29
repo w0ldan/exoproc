@@ -235,7 +235,7 @@ describe('njava-mappings: canonical database and obfuscated pool', () => {
 
     // Obfuscated field resolutions
     expect(pool.resolveField('Exoproc', 'instance')).toBe('a');
-    expect(pool.resolveField('Exoproc', 'httpServer')).toBe('b');
+    expect(pool.resolveField('Exoproc', 'connected')).toBe('b');
     expect(
       pool.resolveField(
         'org.exoproc.njava.agent.utils.Exoproc',
@@ -249,7 +249,7 @@ describe('njava-mappings: canonical database and obfuscated pool', () => {
 
     // Reverse deobfuscation
     expect(pool.getCanonicalField('Exoproc', 'a')).toBe('instance');
-    expect(pool.getCanonicalField('Exoproc', 'b')).toBe('httpServer');
+    expect(pool.getCanonicalField('Exoproc', 'b')).toBe('connected');
     expect(pool.getCanonicalMethod('Exoproc', 'a')).toBe('serializeValue');
   });
 });

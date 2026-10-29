@@ -1,6 +1,6 @@
 {
   "name": "exoproc-minecraft",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "description": "High-level Minecraft runtime inspection, dynamic obfuscation matching, and reflection client for Bun using bun-njava.",
   "main": "./dist/index.js",
   "exports": {

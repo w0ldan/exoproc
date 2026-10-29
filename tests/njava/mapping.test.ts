@@ -182,7 +182,7 @@ describe('njava > Deobfuscation & Mapping Subsystem', () => {
 
     // Obfuscated fields resolution: deobf -> obf
     expect(mapper.resolveObfField('Exoproc', 'instance')).toBe('a');
-    expect(mapper.resolveObfField('Exoproc', 'httpServer')).toBe('b');
+    expect(mapper.resolveObfField('Exoproc', 'connected')).toBe('b');
     expect(
       mapper.resolveObfField(
         'org.exoproc.njava.agent.utils.Exoproc',
@@ -192,7 +192,7 @@ describe('njava > Deobfuscation & Mapping Subsystem', () => {
 
     // Reverse deobfuscated fields: obf -> deobf
     expect(mapper.resolveDeobfField('Exoproc', 'a')).toBe('instance');
-    expect(mapper.resolveDeobfField('Exoproc', 'b')).toBe('httpServer');
+    expect(mapper.resolveDeobfField('Exoproc', 'b')).toBe('connected');
 
     // Obfuscated methods resolution
     expect(mapper.resolveObfMethod('Exoproc', 'serializeValue')).toBe('a');

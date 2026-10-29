@@ -7,9 +7,16 @@ import {
   findWorkspaceDepsConfigs,
   inspectDepChecksum,
   inspectAllDeps,
+  downloadFileSync,
+  extractEntryFromZipSync,
+  computeHash,
   STANDARD_EXOPROC_DEPS,
   type PackageDep,
 } from '../../packages/utils/dist/index.js';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { rmSync, statSync } from 'node:fs';
 
 describe('exoproc-utils downloader', () => {
   it('returns valid deps cache directory', () => {
@@ -76,6 +83,43 @@ describe('exoproc-utils downloader', () => {
     if (inspected.resolvedPath) {
       assert.equal(inspected.status, 'mismatch');
       assert.ok(inspected.error?.includes('mismatch'));
+    }
+  });
+
+  it('extracts entries from zip archives synchronously in pure JS', () => {
+    // Test pure JS in-memory ZIP decompression using the test capstone zip if available
+    const testZip = '/tmp/test-capstone.zip';
+    if (existsSync(testZip)) {
+      const outDll = join(
+        tmpdir(),
+        `test-extract-${randomBytes(4).toString('hex')}.dll`,
+      );
+      try {
+        extractEntryFromZipSync(testZip, outDll, 'capstone.dll');
+        assert.ok(existsSync(outDll));
+        assert.ok(statSync(outDll).size > 1000000);
+        const sha1 = computeHash(outDll, 'sha1');
+        assert.equal(sha1, 'c87eb26c07bb923b6a04da3cbc31b49f64c0c59a');
+      } finally {
+        rmSync(outDll, { force: true });
+      }
+    }
+  });
+
+  it('downloads files synchronously via native runtime process', () => {
+    const testDest = join(
+      tmpdir(),
+      `test-sync-dl-${randomBytes(4).toString('hex')}.json`,
+    );
+    try {
+      downloadFileSync(
+        'https://raw.githubusercontent.com/w0ldan/exoproc/main/package.json',
+        testDest,
+      );
+      assert.ok(existsSync(testDest));
+      assert.ok(statSync(testDest).size > 10);
+    } finally {
+      rmSync(testDest, { force: true });
     }
   });
 });

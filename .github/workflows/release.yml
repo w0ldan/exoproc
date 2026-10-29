@@ -11,8 +11,8 @@ concurrency:
 
 jobs:
   release:
-    name: Version or Publish
-    runs-on: ubuntu-latest
+    name: Build AOT & Release (Windows x64)
+    runs-on: windows-latest
     permissions:
       contents: write
       pull-requests: write
@@ -24,44 +24,77 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Bun
+      - name: Setup Bun (Canary)
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: '1.4.4'
+          bun-version: canary
+
+      - name: Check Exoproc package version change
+        id: check-version
+        shell: bash
+        run: |
+          BEFORE_SHA="${{ github.event.before }}"
+          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BEFORE_SHA}:packages/exoproc/package.json" 2>/dev/null; then
+            BEFORE_SHA="HEAD~1"
+          fi
+
+          EXOPROC_VER=$(node -p "require('./packages/exoproc/package.json').version")
+          PREV_EXOPROC_VER=$(git show "${BEFORE_SHA}:packages/exoproc/package.json" 2>/dev/null | node -e "const fs=require('fs'); try { console.log(JSON.parse(fs.readFileSync(0,'utf8')).version || ''); } catch { console.log(''); }")
+
+          echo "Current Exoproc version: $EXOPROC_VER"
+          echo "Previous Exoproc version: $PREV_EXOPROC_VER"
+
+          if [ "$EXOPROC_VER" != "$PREV_EXOPROC_VER" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$EXOPROC_VER" >> "$GITHUB_OUTPUT"
+            echo "tag=v$EXOPROC_VER" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
+
+      - name: Build all packages
+        run: bun run build
+
+      - name: Compile Native Windows x64 AOT Executable
+        if: steps.check-version.outputs.should_release == 'true'
+        run: |
+          bun run scripts/compile.ts --outfile=release-assets/exoproc.exe
+
+      - name: Create GitHub Release and Upload AOT Executable
+        if: steps.check-version.outputs.should_release == 'true'
+        shell: bash
+        run: |
+          TAG="${{ steps.check-version.outputs.tag }}"
+          VER="${{ steps.check-version.outputs.version }}"
+
+          echo "Publishing release $TAG for Exoproc v$VER..."
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              release-assets/exoproc.exe \
+              --title "v$VER" \
+              --notes "Exoproc v$VER native Windows x64 Ahead-Of-Time (AOT) release."
+          else
+            gh release upload "$TAG" \
+              release-assets/exoproc.exe \
+              --clobber
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure npm registry auth for npmjs
+        if: steps.check-version.outputs.should_release == 'true'
+        shell: bash
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Build and publish packages to npm
+      - name: Publish packages to npm
+        if: steps.check-version.outputs.should_release == 'true'
         run: bun run release
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create GitHub Release on Monorepo Version Bump
-        run: |
-          BEFORE_SHA="${{ github.event.before }}"
-          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BEFORE_SHA}:package.json" 2>/dev/null; then
-            BEFORE_SHA="HEAD~1"
-          fi
-
-          MONOREPO_VER=$(node -p "require('./package.json').version")
-          PREV_MONOREPO_VER=$(git show "${BEFORE_SHA}:package.json" 2>/dev/null | node -e "const fs=require('fs'); try { console.log(JSON.parse(fs.readFileSync(0,'utf8')).version || ''); } catch { console.log(''); }")
-
-          if [ "$MONOREPO_VER" != "$PREV_MONOREPO_VER" ]; then
-            TAG="v$MONOREPO_VER"
-            echo "Monorepo version changed ($PREV_MONOREPO_VER -> $MONOREPO_VER). Creating release $TAG..."
-            if ! gh release view "$TAG" >/dev/null 2>&1; then
-              gh release create "$TAG" \
-                --title "v$MONOREPO_VER" \
-                --notes "Exoproc v$MONOREPO_VER release."
-            fi
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

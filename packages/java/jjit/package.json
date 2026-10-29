@@ -1,6 +1,6 @@
 {
   "name": "exoproc-jjit",
-  "version": "0.6.6",
+  "version": "0.7.0",
   "description": "On-the-fly typed Java source synthesis, AST builder, ECJ compiler, and remapper for the Exoproc ecosystem.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -37,7 +37,7 @@
   },
   "files": [
     "dist",
-    "deps",
+    "deps.json",
     "LICENSE"
   ],
   "license": "MIT",

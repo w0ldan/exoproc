@@ -1,16 +1,24 @@
 import { existsSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { getAgentBytecodeSync, getAgentJarSync } from './agent-builder.js';
+import { getRegisteredAgentContextFactory } from './loader.js';
 import {
   generateObfuscationMappings,
   formatMappingsHumanReadable,
 } from 'exoproc-jjit';
+import {
+  getOrCreateIpcServer,
+  type IpcClientInfo,
+  type IpcServer,
+} from 'exoproc-ipc';
 
 export interface AgentStatus {
   alive: boolean;
-  port: number;
+  pipePath: string;
   uptime: number;
+  pid?: number;
   buildId?: string;
+  targetName?: string;
   isStandalone?: boolean;
   targetJar?: string;
   classCount?: number;
@@ -28,6 +36,7 @@ export interface AgentDumpOptions {
   format?: 'jar' | 'class' | 'mapping';
   javaVersion?: number;
   javaPath?: string;
+  pipePath?: string;
   obfuscate?: boolean;
   dumpMappings?: boolean | string;
 }
@@ -46,64 +55,102 @@ export interface AgentDumpResult {
 }
 
 export interface AgentClientOptions {
-  host?: string;
-  port?: number;
+  server?: IpcServer;
+  pipePath?: string;
+  name?: string;
+  clientId?: string;
+  buildId?: string;
   timeoutMs?: number;
 }
 
-function timeoutSignal(ms: number): any {
-  if (typeof (AbortSignal as any)?.timeout === 'function') {
-    return (AbortSignal as any).timeout(ms);
-  }
-  const ctrl = new AbortController();
-  setTimeout(() => ctrl.abort(), ms);
-  return ctrl.signal;
-}
-
 /**
- * Universal HTTP Client for communicating with the NJava Agent (Exoproc.java).
- * Runs completely cross-platform on any OS without requiring Windows or native bindings.
+ * Zero-port Named Pipe / local socket controller for communicating with an injected Exoproc Java Agent.
+ * Exoproc owns the IPC pipe server (`IpcServer`), and target JVM agents connect outward as clients.
  */
 export class AgentClient {
-  public readonly host: string;
-  public readonly port: number;
-  public readonly baseUrl: string;
+  public readonly server: IpcServer;
+  public readonly pipePath: string;
+  public readonly clientId?: string;
+  public readonly buildId?: string;
   public readonly timeoutMs: number;
 
   constructor(options: AgentClientOptions = {}) {
-    this.host = options.host ?? '127.0.0.1';
-    this.port = options.port ?? 43378;
     this.timeoutMs = options.timeoutMs ?? 15000;
-    this.baseUrl = `http://${this.host}:${this.port}`;
+    this.server =
+      options.server ??
+      getOrCreateIpcServer({
+        pipePath: options.pipePath,
+        name: options.name,
+        timeoutMs: this.timeoutMs,
+      });
+    this.pipePath = this.server.pipePath;
+    this.clientId = options.clientId;
+    this.buildId = options.buildId;
   }
 
   /**
-   * Checks whether the agent HTTP server is currently alive and responsive.
+   * Starts listening on the underlying IPC pipe server if not already active.
+   */
+  public async listen(): Promise<string> {
+    return await this.server.listen();
+  }
+
+  /**
+   * Waits for an injected Java agent matching this client's filter to connect to the pipe.
+   */
+  public async waitForConnection(timeoutMs?: number): Promise<IpcClientInfo> {
+    return await this.server.waitForClient(
+      {
+        kind: 'java-agent',
+        clientId: this.clientId,
+        buildId: this.buildId,
+      },
+      timeoutMs ?? this.timeoutMs,
+    );
+  }
+
+  /**
+   * Checks whether an agent is currently connected and responsive on the pipe.
    */
   public async isAlive(timeoutMs = 1500): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/status`, {
-        signal: timeoutSignal(timeoutMs),
+      const clients = this.server.getClients({
+        clientId: this.clientId,
+        buildId: this.buildId,
       });
-      if (res.ok) {
-        const json = (await res.json()) as any;
-        return Boolean(json.alive !== false);
-      }
-    } catch {}
-    return false;
+      if (clients.length === 0) return false;
+      const res = await this.server.request<any>(
+        'status',
+        {},
+        {
+          clientId: this.clientId,
+          buildId: this.buildId,
+          timeoutMs,
+        },
+      );
+      return Boolean(res?.alive !== false);
+    } catch {
+      return false;
+    }
   }
 
   /**
-   * Retrieves runtime status, active port, uptime, and target JVM details.
+   * Retrieves runtime status, active pipe path, PID, uptime, and target JVM details.
    */
   public async getStatus(): Promise<AgentStatus> {
-    const res = await fetch(`${this.baseUrl}/status`, {
-      signal: timeoutSignal(this.timeoutMs),
-    });
-    if (!res.ok) {
-      throw new Error(`Agent status failed: HTTP ${res.status}`);
+    const res = await this.server.request<any>(
+      'status',
+      {},
+      {
+        clientId: this.clientId,
+        buildId: this.buildId,
+        timeoutMs: this.timeoutMs,
+      },
+    );
+    if (!res || res.success === false) {
+      throw new Error(res?.error || 'Agent status request failed');
     }
-    return (await res.json()) as AgentStatus;
+    return res as AgentStatus;
   }
 
   /**
@@ -115,7 +162,7 @@ export class AgentClient {
   }
 
   /**
-   * Executes a JavaScript snippet inside the agent's embedded Nashorn runtime.
+   * Executes a snippet inside the agent's script evaluation runtime.
    */
   public async eval(
     code: string,
@@ -123,20 +170,16 @@ export class AgentClient {
     timeoutMs?: number,
   ): Promise<AgentEvalResult> {
     try {
-      const res = await fetch(`${this.baseUrl}/eval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, globals }),
-        signal: timeoutSignal(timeoutMs ?? this.timeoutMs),
-      });
-      if (!res.ok) {
-        return {
-          success: false,
-          error: `Agent eval HTTP ${res.status}`,
-          logs: [],
-        };
-      }
-      return (await res.json()) as AgentEvalResult;
+      const res = await this.server.request<AgentEvalResult>(
+        'eval',
+        { code, globals },
+        {
+          clientId: this.clientId,
+          buildId: this.buildId,
+          timeoutMs: timeoutMs ?? this.timeoutMs,
+        },
+      );
+      return res;
     } catch (err: any) {
       return {
         success: false,
@@ -150,42 +193,59 @@ export class AgentClient {
    * Retrieves all loaded/inspected classes available to the agent.
    */
   public async getClasses(): Promise<string[]> {
-    const res = await fetch(`${this.baseUrl}/classes`, {
-      signal: timeoutSignal(this.timeoutMs),
-    });
-    if (!res.ok) {
-      throw new Error(`Agent classes failed: HTTP ${res.status}`);
+    const res = await this.server.request<any>(
+      'classes',
+      {},
+      {
+        clientId: this.clientId,
+        buildId: this.buildId,
+        timeoutMs: this.timeoutMs,
+      },
+    );
+    if (!res || res.success === false) {
+      throw new Error(res?.error || 'Agent classes request failed');
     }
-    const json = (await res.json()) as any;
-    return json.classes ?? [];
+    return res.classes ?? [];
   }
 
   /**
-   * Requests the agent HTTP server to stop and shut down.
+   * Requests the connected Java agent to disconnect and stop its worker threads.
    */
   public async shutdown(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/shutdown`, {
-        signal: timeoutSignal(5000),
-      });
-      return res.ok;
+      const res = await this.server.request<any>(
+        'shutdown',
+        {},
+        {
+          clientId: this.clientId,
+          buildId: this.buildId,
+          timeoutMs: 5000,
+        },
+      );
+      return Boolean(res?.success);
     } catch {
       return false;
     }
   }
 
   /**
-   * Creates a JavaContext reflection proxy connected directly to this agent over HTTP.
+   * Creates an async JavaContext reflection proxy connected directly to this agent over Named Pipe IPC.
    */
   public async getJavaContext(
-    options: { sync?: boolean; mapper?: any; pool?: any } = {},
+    options: { mapper?: any; pool?: any } = {},
   ): Promise<any> {
-    const njavaPkg = 'bun-njava';
-    const { createAgentContext } = (await import(njavaPkg)) as any;
-    return createAgentContext({
-      host: this.host,
-      port: this.port,
-      sync: options.sync ?? true,
+    const factory = getRegisteredAgentContextFactory();
+    if (!factory) {
+      throw new Error(
+        'Agent JavaContext factory is not registered. Import "bun-njava" before calling getJavaContext().',
+      );
+    }
+    return factory({
+      server: this.server,
+      pipePath: this.pipePath,
+      clientId: this.clientId,
+      buildId: this.buildId,
+      sync: false,
       mapper: options.mapper,
       pool: options.pool,
     });
@@ -195,7 +255,7 @@ export class AgentClient {
    * Dumps this agent's compiled binary (JAR or raw .class) and obfuscation mappings to disk.
    */
   public async dump(options: AgentDumpOptions = {}): Promise<AgentDumpResult> {
-    return dumpAgent(options);
+    return dumpAgent({ pipePath: this.pipePath, ...options });
   }
 }
 
@@ -207,7 +267,7 @@ export function createAgentClient(options?: AgentClientOptions): AgentClient {
 }
 
 /**
- * Helper to directly evaluate code on an agent without manually instantiating a client.
+ * Helper to directly evaluate code on a connected agent without manually instantiating a client.
  */
 export async function evalAgent(
   code: string,
@@ -241,6 +301,7 @@ export async function dumpAgent(
       const rawRes = getAgentBytecodeSync({
         javaVersion,
         javaPath: options.javaPath,
+        pipePath: options.pipePath,
         obfuscate: false,
       });
       const tiny = generateObfuscationMappings(rawRes.bytecode);
@@ -292,8 +353,8 @@ export async function dumpAgent(
     const defaultFileName = isClass
       ? 'Exoproc.class'
       : obfuscate
-        ? `njava-agent-java${javaVersion}-obf.jar`
-        : `njava-agent-java${javaVersion}.jar`;
+        ? `exoproc-agent-java${javaVersion}-obf.jar`
+        : `exoproc-agent-java${javaVersion}.jar`;
 
     if (targetPath) {
       if (existsSync(targetPath) && statSync(targetPath).isDirectory()) {
@@ -317,6 +378,7 @@ export async function dumpAgent(
       const res = getAgentBytecodeSync({
         javaVersion,
         javaPath: options.javaPath,
+        pipePath: options.pipePath,
         obfuscate,
       });
 
@@ -352,6 +414,7 @@ export async function dumpAgent(
       const res = getAgentJarSync({
         javaVersion,
         javaPath: options.javaPath,
+        pipePath: options.pipePath,
         outputPath: targetPath,
         obfuscate,
         force: true,

@@ -1,6 +1,7 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { compileJavaSync, resolveDefaultJavaPath } from 'exoproc-jjit';
+import { getAgentCacheDir } from 'exoproc-utils';
 import type { ClassDefineOptions } from './types.js';
 
 export function resolveDefaultClasspath(
@@ -18,6 +19,26 @@ export function resolveDefaultClasspath(
   if (process.env.NJAVA_AGENT_JAR && existsSync(process.env.NJAVA_AGENT_JAR)) {
     result.push(process.env.NJAVA_AGENT_JAR);
   }
+
+  try {
+    const cacheDir = getAgentCacheDir();
+    if (existsSync(cacheDir)) {
+      const preferred = join(cacheDir, 'exoproc-agent-java8.jar');
+      if (existsSync(preferred)) {
+        result.push(preferred);
+      } else {
+        const match = readdirSync(cacheDir).find(
+          (f) =>
+            f.startsWith('exoproc-agent-java') &&
+            f.endsWith('.jar') &&
+            !f.endsWith('-obf.jar'),
+        );
+        if (match) {
+          result.push(join(cacheDir, match));
+        }
+      }
+    }
+  } catch {}
 
   let curr = process.cwd();
   for (let i = 0; i < 5; i++) {

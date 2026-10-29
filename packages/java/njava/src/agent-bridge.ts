@@ -9,10 +9,20 @@ import { JavaContext, createJavaContext } from './proxy.js';
 import { JavaMappingRegistry } from './mapping.js';
 import type { MappingPool } from 'exoproc-mappings';
 import { adaptBridgeArgument, globalCallbackRegistry } from './adapter.js';
+import {
+  getOrCreateIpcServer,
+  type IpcCallbackPayload,
+  type IpcCallbackResult,
+  type IpcServer,
+} from 'exoproc-ipc';
+import { registerAgentContextFactory } from 'njava-agent';
 
 export interface AgentBridgeOptions {
-  host?: string;
-  port?: number;
+  server?: IpcServer;
+  pipePath?: string;
+  name?: string;
+  clientId?: string;
+  buildId?: string;
   timeoutMs?: number;
 }
 
@@ -33,18 +43,22 @@ function serializeArgs(args: readonly any[]): any[] {
   return args.map(serializeArg);
 }
 
+function throwAsyncRequired(op: string): never {
+  throw new Error(
+    `AgentReflectionBridge.${op} requires async execution (sync: false) over Named Pipe IPC.`,
+  );
+}
+
 /**
- * Remote Reflection RPC Bridge connecting Bun (njava / njava-runtime) to njava-agent over HTTP.
- *
- * Implements the ReflectionBridge interface so that createJavaClassProxy,
- * createJavaObjectProxy, and JavaContext work transparently over the network without
- * running any JavaScript inside the JVM.
+ * Remote Reflection RPC Bridge connecting Bun (`bun-njava`) to an injected `Exoproc` Java agent
+ * over zero-port Named Pipe / local socket IPC (`exoproc-ipc`).
  */
 export class AgentReflectionBridge {
   public readonly isAgentBridge = true;
-  public readonly host: string;
-  public readonly port: number;
-  public readonly baseUrl: string;
+  public readonly server: IpcServer;
+  public readonly pipePath: string;
+  public readonly clientId?: string;
+  public readonly buildId?: string;
   public readonly timeoutMs: number;
 
   private readonly classCache = new Map<string, ReflectedClass>();
@@ -63,13 +77,27 @@ export class AgentReflectionBridge {
     Array<{ ctorObj: bigint; paramTypes: readonly string[] }>
   >();
   private readonly superclassByClassId = new Map<bigint, string>();
+  private readonly superclassChainByClassId = new Map<bigint, string[]>();
 
-  /**
-   * Optional executor object handle. While set, every `/reflection/invoke` is routed through it
-   * (the agent submits the call as a Runnable/Callable to that object and waits for completion).
-   * Used via `Java.runOn(executor, fn)`.
-   */
   private executorHandle: bigint | null = null;
+
+  public readonly callbackRegistry = new Map<string, (...args: any[]) => any>();
+  private unsubscribeCallbacks: (() => void) | null = null;
+
+  constructor(options: AgentBridgeOptions = {}) {
+    this.timeoutMs = options.timeoutMs ?? 15000;
+    this.server =
+      options.server ??
+      getOrCreateIpcServer({
+        pipePath: options.pipePath,
+        name: options.name,
+        timeoutMs: this.timeoutMs,
+      });
+    this.pipePath = this.server.pipePath;
+    this.clientId = options.clientId;
+    this.buildId = options.buildId;
+    this.startCallbackListener();
+  }
 
   public getExecutor(): bigint | null {
     return this.executorHandle;
@@ -95,10 +123,6 @@ export class AgentReflectionBridge {
     return body;
   }
 
-  public readonly callbackRegistry = new Map<string, (...args: any[]) => any>();
-  private callbackAbortController: AbortController | null = null;
-  private isListeningCallbacks = false;
-
   public registerCallback(
     callbackId: string,
     fn: (...args: any[]) => any,
@@ -118,85 +142,27 @@ export class AgentReflectionBridge {
   }
 
   public startCallbackListener(): void {
-    if (this.isListeningCallbacks) return;
-    this.isListeningCallbacks = true;
-    this.callbackAbortController = new AbortController();
-    this.runCallbackEventLoop(this.callbackAbortController.signal);
+    if (this.unsubscribeCallbacks) return;
+    this.unsubscribeCallbacks = this.server.onCallback(
+      async (payload: IpcCallbackPayload, incomingClientId: string) => {
+        if (this.clientId && incomingClientId !== this.clientId) {
+          return undefined;
+        }
+        if (
+          !this.callbackRegistry.has(payload.callbackId) &&
+          !globalCallbackRegistry.has(payload.callbackId)
+        ) {
+          return undefined;
+        }
+        return await this.dispatchIncomingCallback(payload);
+      },
+    );
   }
 
   public stopCallbackListener(): void {
-    this.isListeningCallbacks = false;
-    if (this.callbackAbortController) {
-      this.callbackAbortController.abort();
-      this.callbackAbortController = null;
-    }
-  }
-
-  private async runCallbackEventLoop(signal: AbortSignal): Promise<void> {
-    while (!signal.aborted && this.isListeningCallbacks) {
-      try {
-        const res = await fetch(`${this.baseUrl}/callback/events`, {
-          headers: {
-            Accept: 'text/event-stream',
-          },
-          signal,
-        });
-
-        if (!res.ok) {
-          await new Promise((r) => setTimeout(r, 1000));
-          continue;
-        }
-
-        const reader = res.body?.getReader();
-        if (!reader) {
-          await new Promise((r) => setTimeout(r, 1000));
-          continue;
-        }
-
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (!signal.aborted && this.isListeningCallbacks) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const blocks = buffer.split('\n\n');
-          buffer = blocks.pop() || '';
-
-          for (const block of blocks) {
-            await this.handleSseBlock(block.trim());
-          }
-        }
-      } catch {
-        if (signal.aborted || !this.isListeningCallbacks) break;
-        await new Promise((r) => setTimeout(r, 500));
-      }
-    }
-  }
-
-  private async handleSseBlock(block: string): Promise<void> {
-    if (!block || block.startsWith(':')) return;
-
-    const lines = block.split('\n');
-    let eventName = 'message';
-    let dataStr = '';
-
-    for (const line of lines) {
-      if (line.startsWith('event:')) {
-        eventName = line.substring(6).trim();
-      } else if (line.startsWith('data:')) {
-        dataStr = line.substring(5).trim();
-      }
-    }
-
-    if (eventName === 'callback' && dataStr) {
-      try {
-        const payload = JSON.parse(dataStr);
-        await this.dispatchIncomingCallback(payload);
-      } catch (err) {
-        console.error('[AgentBridge] Failed to handle callback event:', err);
-      }
+    if (this.unsubscribeCallbacks) {
+      this.unsubscribeCallbacks();
+      this.unsubscribeCallbacks = null;
     }
   }
 
@@ -205,56 +171,30 @@ export class AgentReflectionBridge {
     callbackId: string;
     method: string;
     args: any[];
-  }): Promise<{ id: number; success: boolean; result?: any; error?: string }> {
+  }): Promise<IpcCallbackResult> {
     const { id, callbackId, method, args } = payload;
     const fn =
       this.callbackRegistry.get(callbackId) ||
       globalCallbackRegistry.get(callbackId);
 
-    let success = true;
-    let result: any = null;
-    let error: string | undefined;
-
     if (!fn) {
-      success = false;
-      error = `No callback function registered for callbackId: ${callbackId} (method: ${method})`;
-    } else {
-      try {
-        const safeArgs = Array.isArray(args) ? args : [];
-        result = await fn(...safeArgs);
-      } catch (e: any) {
-        success = false;
-        error = e?.message || String(e);
-      }
+      return {
+        id,
+        success: false,
+        error: `No callback function registered for callbackId: ${callbackId} (method: ${method})`,
+      };
     }
 
     try {
-      await fetch(`${this.baseUrl}/callback/reply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, success, result, error }),
-      });
-    } catch (e) {
-      console.error(
-        `[AgentBridge] Failed to send callback reply for id ${id}:`,
-        e,
-      );
-    }
-
-    return { id, success, result, error };
-  }
-
-  public async pollCallbackOnce(timeoutMs = 2000): Promise<any> {
-    try {
-      const res = await fetch(
-        `${this.baseUrl}/callback/poll?timeout=${timeoutMs}`,
-      );
-      if (!res.ok) return null;
-      const data = (await res.json()) as any;
-      if (!data || data.empty || !data.id) return null;
-      return await this.dispatchIncomingCallback(data);
-    } catch {
-      return null;
+      const safeArgs = Array.isArray(args) ? args : [];
+      const result = await fn(...safeArgs);
+      return { id, success: true, result };
+    } catch (e: any) {
+      return {
+        id,
+        success: false,
+        error: e?.message || String(e),
+      };
     }
   }
 
@@ -262,77 +202,24 @@ export class AgentReflectionBridge {
     return adaptBridgeArgument(arg, targetType, this, context);
   }
 
-  constructor(options: AgentBridgeOptions = {}) {
-    this.host = options.host || '127.0.0.1';
-    this.port = options.port || 43378;
-    this.baseUrl = `http://${this.host}:${this.port}`;
-    this.timeoutMs = options.timeoutMs || 15000;
-  }
-
-  // --- HTTP RPC Helpers ---
-
-  private postSync(endpoint: string, data: any): any {
-    const url = `${this.baseUrl}${endpoint}`;
-    const body = JSON.stringify(data);
-    const proc = Bun.spawnSync([
-      'curl',
-      '-s',
-      '-H',
-      'Connection: close',
-      '-H',
-      'Content-Type: application/json',
-      '-X',
-      'POST',
-      url,
-      '-d',
-      body,
-    ]);
-
-    if (proc.exitCode !== 0) {
-      throw new Error(
-        `Agent RPC error: curl failed with code ${proc.exitCode}: ${proc.stderr?.toString()}`,
-      );
-    }
-
-    const text = proc.stdout.toString().trim();
-    if (!text) {
-      throw new Error(`Agent RPC error: empty response from ${endpoint}`);
-    }
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw new Error(
-        `Agent RPC error: invalid JSON from ${endpoint}: ${text}`,
-      );
-    }
-  }
-
-  private async postAsync(endpoint: string, data: any): Promise<any> {
-    const url = `${this.baseUrl}${endpoint}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Connection: 'close',
-      },
-      body: JSON.stringify(data),
-      signal: AbortSignal.timeout(this.timeoutMs),
+  private async rpcAsync(
+    action: string,
+    data: Record<string, any> = {},
+  ): Promise<any> {
+    const cleanAction = action.startsWith('/') ? action.slice(1) : action;
+    return await this.server.request(cleanAction, data, {
+      kind: 'java-agent',
+      clientId: this.clientId,
+      buildId: this.buildId,
+      timeoutMs: this.timeoutMs,
     });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Agent RPC error (${res.status}): ${errText}`);
-    }
-
-    return await res.json();
   }
 
   // --- Class Metadata Processing & Caching ---
 
   private populateClass(data: any): ReflectedClass {
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to inspect class');
+    if (!data?.success) {
+      throw new Error(data?.error || 'Failed to inspect class');
     }
 
     const classObj = BigInt(data.classId);
@@ -402,12 +289,18 @@ export class AgentReflectionBridge {
     if (data.superclass) {
       this.superclassByClassId.set(classObj, data.superclass);
     }
+    if (Array.isArray(data.superclassChain)) {
+      this.superclassChainByClassId.set(classObj, data.superclassChain);
+    }
 
     const reflectedClass = new ReflectedClass(
       classObj,
       className,
       this as unknown as ReflectionBridge,
     );
+    if (typeof data.isInterface === 'boolean') {
+      (reflectedClass as any).isInterface = data.isInterface;
+    }
     this.classCache.set(className, reflectedClass);
     this.classById.set(classObj, { name: className, class: reflectedClass });
     return reflectedClass;
@@ -415,13 +308,31 @@ export class AgentReflectionBridge {
 
   // --- ReflectionBridge Interface Methods ---
 
+  public async defineClass(
+    name: string,
+    bytecode: Uint8Array | Buffer,
+  ): Promise<ReflectedClass> {
+    const b64 = Buffer.from(bytecode).toString('base64');
+    const data = await this.rpcAsync('reflection/defineClass', {
+      name,
+      bytecode: b64,
+    });
+    if (!data?.success) {
+      throw new Error(data?.error || `Failed to define class ${name}`);
+    }
+    const resolvedName = (data.name as string) || name;
+    this.classCache.delete(resolvedName);
+    this.classCache.delete(name);
+    return await this.getClass(resolvedName);
+  }
+
   public async getClass(name: string): Promise<ReflectedClass> {
     const targetName =
       name === 'Exoproc' ? 'org.exoproc.njava.agent.utils.Exoproc' : name;
     const cached = this.classCache.get(targetName);
     if (cached) return cached;
 
-    const data = await this.postAsync('/reflection/class', {
+    const data = await this.rpcAsync('reflection/class', {
       name: targetName,
     });
     const cls = this.populateClass(data);
@@ -436,13 +347,7 @@ export class AgentReflectionBridge {
       name === 'Exoproc' ? 'org.exoproc.njava.agent.utils.Exoproc' : name;
     const cached = this.classCache.get(targetName);
     if (cached) return cached;
-
-    const data = this.postSync('/reflection/class', { name: targetName });
-    const cls = this.populateClass(data);
-    if (name !== targetName) {
-      this.classCache.set(name, cls);
-    }
-    return cls;
+    return throwAsyncRequired('getClassSync');
   }
 
   public async findClass(name: string): Promise<ReflectedClass | undefined> {
@@ -454,11 +359,9 @@ export class AgentReflectionBridge {
   }
 
   public findClassSync(name: string): ReflectedClass | undefined {
-    try {
-      return this.getClassSync(name);
-    } catch {
-      return undefined;
-    }
+    const targetName =
+      name === 'Exoproc' ? 'org.exoproc.njava.agent.utils.Exoproc' : name;
+    return this.classCache.get(targetName);
   }
 
   public async invokeUnboxed(
@@ -466,8 +369,8 @@ export class AgentReflectionBridge {
     targetPtr = 0n,
     args: readonly any[] = [],
   ): Promise<any> {
-    const data = await this.postAsync(
-      '/reflection/invoke',
+    const data = await this.rpcAsync(
+      'reflection/invoke',
       this.invokeBody(methodObj, targetPtr, args),
     );
 
@@ -481,24 +384,8 @@ export class AgentReflectionBridge {
     return data.value;
   }
 
-  public invokeUnboxedSync(
-    methodObj: bigint,
-    targetPtr = 0n,
-    args: readonly any[] = [],
-  ): any {
-    const data = this.postSync(
-      '/reflection/invoke',
-      this.invokeBody(methodObj, targetPtr, args),
-    );
-
-    if (!data.success) {
-      throw new Error(data.error || 'Method invocation failed');
-    }
-
-    if (data.isObject) {
-      return BigInt(data.handle);
-    }
-    return data.value;
+  public invokeUnboxedSync(): any {
+    return throwAsyncRequired('invokeUnboxedSync');
   }
 
   public async invokeMethod(
@@ -509,12 +396,8 @@ export class AgentReflectionBridge {
     return await this.invokeUnboxed(methodObj, targetPtr, args);
   }
 
-  public invokeMethodSync(
-    methodObj: bigint,
-    targetPtr = 0n,
-    args: readonly any[] = [],
-  ): any {
-    return this.invokeUnboxedSync(methodObj, targetPtr, args);
+  public invokeMethodSync(): any {
+    return throwAsyncRequired('invokeMethodSync');
   }
 
   public async invoke(
@@ -526,13 +409,8 @@ export class AgentReflectionBridge {
     return typeof res === 'bigint' ? res : 0n;
   }
 
-  public invokeSync(
-    methodObj: bigint,
-    targetPtr = 0n,
-    args: readonly any[] = [],
-  ): bigint {
-    const res = this.invokeUnboxedSync(methodObj, targetPtr, args);
-    return typeof res === 'bigint' ? res : 0n;
+  public invokeSync(): bigint {
+    return throwAsyncRequired('invokeSync');
   }
 
   public async readField(
@@ -540,7 +418,7 @@ export class AgentReflectionBridge {
     fieldName: string,
     targetPtr = 0n,
   ): Promise<any> {
-    const data = await this.postAsync('/reflection/field/get', {
+    const data = await this.rpcAsync('reflection/field/get', {
       classId: Number(classObj),
       fieldName,
       targetHandle: Number(targetPtr),
@@ -556,25 +434,8 @@ export class AgentReflectionBridge {
     return data.value;
   }
 
-  public readFieldSync(
-    classObj: bigint,
-    fieldName: string,
-    targetPtr = 0n,
-  ): any {
-    const data = this.postSync('/reflection/field/get', {
-      classId: Number(classObj),
-      fieldName,
-      targetHandle: Number(targetPtr),
-    });
-
-    if (!data.success) {
-      throw new Error(data.error || `Failed to read field ${fieldName}`);
-    }
-
-    if (data.isObject) {
-      return BigInt(data.handle);
-    }
-    return data.value;
+  public readFieldSync(): any {
+    return throwAsyncRequired('readFieldSync');
   }
 
   public async writeField(
@@ -583,7 +444,7 @@ export class AgentReflectionBridge {
     value: any,
     targetPtr = 0n,
   ): Promise<void> {
-    const data = await this.postAsync('/reflection/field/set', {
+    const data = await this.rpcAsync('reflection/field/set', {
       classId: Number(classObj),
       fieldName,
       targetHandle: Number(targetPtr),
@@ -595,29 +456,15 @@ export class AgentReflectionBridge {
     }
   }
 
-  public writeFieldSync(
-    classObj: bigint,
-    fieldName: string,
-    value: any,
-    targetPtr = 0n,
-  ): void {
-    const data = this.postSync('/reflection/field/set', {
-      classId: Number(classObj),
-      fieldName,
-      targetHandle: Number(targetPtr),
-      value: serializeArg(value),
-    });
-
-    if (!data.success) {
-      throw new Error(data.error || `Failed to write field ${fieldName}`);
-    }
+  public writeFieldSync(): void {
+    return throwAsyncRequired('writeFieldSync');
   }
 
   public async getFieldValueUnboxed(
     fieldObj: bigint,
     targetPtr = 0n,
   ): Promise<any> {
-    const data = await this.postAsync('/reflection/field/get', {
+    const data = await this.rpcAsync('reflection/field/get', {
       fieldId: Number(fieldObj),
       targetHandle: Number(targetPtr),
     });
@@ -632,20 +479,8 @@ export class AgentReflectionBridge {
     return data.value;
   }
 
-  public getFieldValueUnboxedSync(fieldObj: bigint, targetPtr = 0n): any {
-    const data = this.postSync('/reflection/field/get', {
-      fieldId: Number(fieldObj),
-      targetHandle: Number(targetPtr),
-    });
-
-    if (!data.success) {
-      throw new Error(data.error || `Failed to get field ${fieldObj}`);
-    }
-
-    if (data.isObject) {
-      return BigInt(data.handle);
-    }
-    return data.value;
+  public getFieldValueUnboxedSync(): any {
+    return throwAsyncRequired('getFieldValueUnboxedSync');
   }
 
   public async setFieldValue(
@@ -653,7 +488,7 @@ export class AgentReflectionBridge {
     value: any,
     targetPtr = 0n,
   ): Promise<void> {
-    const data = await this.postAsync('/reflection/field/set', {
+    const data = await this.rpcAsync('reflection/field/set', {
       fieldId: Number(fieldObj),
       targetHandle: Number(targetPtr),
       value: serializeArg(value),
@@ -664,23 +499,15 @@ export class AgentReflectionBridge {
     }
   }
 
-  public setFieldValueSync(fieldObj: bigint, value: any, targetPtr = 0n): void {
-    const data = this.postSync('/reflection/field/set', {
-      fieldId: Number(fieldObj),
-      targetHandle: Number(targetPtr),
-      value: serializeArg(value),
-    });
-
-    if (!data.success) {
-      throw new Error(data.error || `Failed to set field ${fieldObj}`);
-    }
+  public setFieldValueSync(): void {
+    return throwAsyncRequired('setFieldValueSync');
   }
 
   public async construct(
     ctorObj: bigint,
     args: readonly any[] = [],
   ): Promise<bigint> {
-    const data = await this.postAsync('/reflection/construct', {
+    const data = await this.rpcAsync('reflection/construct', {
       ctorId: Number(ctorObj),
       args: serializeArgs(args),
     });
@@ -692,21 +519,12 @@ export class AgentReflectionBridge {
     return BigInt(data.handle);
   }
 
-  public constructSync(ctorObj: bigint, args: readonly any[] = []): bigint {
-    const data = this.postSync('/reflection/construct', {
-      ctorId: Number(ctorObj),
-      args: serializeArgs(args),
-    });
-
-    if (!data.success) {
-      throw new Error(data.error || 'Constructor invocation failed');
-    }
-
-    return BigInt(data.handle);
+  public constructSync(): bigint {
+    return throwAsyncRequired('constructSync');
   }
 
   public async getObjectClass(objPtr: bigint): Promise<bigint> {
-    const data = await this.postAsync('/reflection/object/class', {
+    const data = await this.rpcAsync('reflection/object/class', {
       handle: Number(objPtr),
       targetHandle: Number(objPtr),
     });
@@ -722,21 +540,8 @@ export class AgentReflectionBridge {
     return classObj;
   }
 
-  public getObjectClassSync(objPtr: bigint): bigint {
-    const data = this.postSync('/reflection/object/class', {
-      handle: Number(objPtr),
-      targetHandle: Number(objPtr),
-    });
-
-    if (!data.success) {
-      throw new Error(data.error || `Failed to get class for object ${objPtr}`);
-    }
-
-    const classObj = BigInt(data.classId);
-    if (!this.classById.has(classObj)) {
-      this.getClassSync(data.name);
-    }
-    return classObj;
+  public getObjectClassSync(): bigint {
+    return throwAsyncRequired('getObjectClassSync');
   }
 
   public async getClassName(classObj: bigint): Promise<string> {
@@ -756,13 +561,12 @@ export class AgentReflectionBridge {
     return await this.getClassName(classObj);
   }
 
-  public getObjectClassNameSync(objPtr: bigint): string {
-    const classObj = this.getObjectClassSync(objPtr);
-    return this.getClassNameSync(classObj);
+  public getObjectClassNameSync(): string {
+    return throwAsyncRequired('getObjectClassNameSync');
   }
 
   public async getAoString(objPtr: bigint): Promise<string> {
-    const data = await this.postAsync('/reflection/object/string', {
+    const data = await this.rpcAsync('reflection/object/string', {
       handle: Number(objPtr),
       targetHandle: Number(objPtr),
     });
@@ -773,16 +577,8 @@ export class AgentReflectionBridge {
     return data.value;
   }
 
-  public getAoStringSync(objPtr: bigint): string {
-    const data = this.postSync('/reflection/object/string', {
-      handle: Number(objPtr),
-      targetHandle: Number(objPtr),
-    });
-
-    if (!data.success) {
-      return `[JavaObject @ 0x${objPtr.toString(16)}]`;
-    }
-    return data.value;
+  public getAoStringSync(): string {
+    return throwAsyncRequired('getAoStringSync');
   }
 
   public async getAllReflectedMethods(
@@ -987,15 +783,13 @@ export class AgentReflectionBridge {
   public getSuperclassSync(classObj: bigint): bigint | undefined {
     const scName = this.superclassByClassId.get(classObj);
     if (!scName) return undefined;
-    try {
-      const sc = this.getClassSync(scName);
-      return sc.classObj;
-    } catch {
-      return undefined;
-    }
+    const cached = this.classCache.get(scName);
+    return cached?.classObj;
   }
 
   public async getSuperclassChain(classObj: bigint): Promise<string[]> {
+    const precomputed = this.superclassChainByClassId.get(classObj);
+    if (precomputed) return [...precomputed];
     const chain: string[] = [];
     let currentName = this.superclassByClassId.get(classObj);
     while (currentName) {
@@ -1008,12 +802,15 @@ export class AgentReflectionBridge {
   }
 
   public getSuperclassChainSync(classObj: bigint): string[] {
+    const precomputed = this.superclassChainByClassId.get(classObj);
+    if (precomputed) return [...precomputed];
     const chain: string[] = [];
     let currentName = this.superclassByClassId.get(classObj);
     while (currentName) {
       chain.push(currentName);
       if (currentName === 'java.lang.Object') break;
-      const sc = this.getClassSync(currentName);
+      const sc = this.classCache.get(currentName);
+      if (!sc) break;
       currentName = this.superclassByClassId.get(sc.classObj);
     }
     return chain;
@@ -1021,36 +818,40 @@ export class AgentReflectionBridge {
 
   public async releaseHandles(handles: bigint[]): Promise<void> {
     if (!handles.length) return;
-    await this.postAsync('/reflection/release', {
+    await this.rpcAsync('reflection/release', {
       handles: handles.map((h) => Number(h)),
     });
   }
 
-  public releaseHandlesSync(handles: bigint[]): void {
-    if (!handles.length) return;
-    this.postSync('/reflection/release', {
-      handles: handles.map((h) => Number(h)),
-    });
+  public releaseHandlesSync(): void {
+    return throwAsyncRequired('releaseHandlesSync');
   }
 }
 
 /**
- * Creates a JavaContext backed by the remote njava-agent reflection RPC bridge.
+ * Creates an async JavaContext backed by the remote Named Pipe `Exoproc` Java agent reflection RPC bridge.
  */
-export function createAgentContext(options?: {
-  host?: string;
-  port?: number;
-  sync?: boolean;
-  mapper?: JavaMappingRegistry;
-  pool?: MappingPool;
-}): JavaContext {
-  const host = options?.host ?? '127.0.0.1';
-  const port = options?.port ?? 43378;
-  const sync = options?.sync ?? true;
-  const bridge = new AgentReflectionBridge({ host, port });
+export function createAgentContext(
+  options?: AgentBridgeOptions & {
+    sync?: boolean;
+    mapper?: JavaMappingRegistry;
+    pool?: MappingPool;
+  },
+): JavaContext {
+  const sync = options?.sync ?? false;
+  const bridge = new AgentReflectionBridge({
+    server: options?.server,
+    pipePath: options?.pipePath,
+    name: options?.name,
+    clientId: options?.clientId,
+    buildId: options?.buildId,
+    timeoutMs: options?.timeoutMs,
+  });
   return createJavaContext(bridge as unknown as ReflectionBridge, {
     sync,
     mapper: options?.mapper,
     pool: options?.pool,
   });
 }
+
+registerAgentContextFactory(createAgentContext);

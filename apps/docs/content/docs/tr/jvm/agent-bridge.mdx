@@ -6,7 +6,7 @@ description: 'Sıfır enjeksiyonlu JNI yansıması ile süreç içi yüksek hız
 Exoproc, hedef Java Sanal Makineleri (JVM) ile iletişim kurmak için iki farklı çalışma köprüsü sunar:
 
 1. **`ReflectionBridge` (Saf JNI):** Sıfır enjeksiyonlu, tamamen gizli ve `jvm.dll` VTable çağrıları üzerinden süreçler arası çalışan mimari.
-2. **`AgentReflectionBridge` (Süreç İçi Ajan):** JVM içerisinde çalışan gömülü HTTP/RPC sunucusuyla yüksek verim ve minimum gecikme sağlayan bellek içi ajan.
+2. **`AgentReflectionBridge` (Süreç İçi Ajan):** Hiçbir TCP portu açmadan doğrudan Windows Named Pipe (`\\.\pipe\exoproc_*`) üzerinden Bun'a bağlanan yüksek verimli bellek içi ajan.
 
 ```text
                         ┌─────────────────────────────────┐
@@ -19,7 +19,7 @@ Exoproc, hedef Java Sanal Makineleri (JVM) ile iletişim kurmak için iki farkl�
      │   ReflectionBridge    │                       │  AgentReflectionBridge│
      │       (Saf JNI)       │                       │   (Süreç İçi Ajan)    │
      └───────────┬───────────┘                       └───────────┬───────────┘
-                 │ Süreçler Arası Bellek Yönlendirme             │ Yerel HTTP / İkili RPC
+                 │ Süreçler Arası Bellek Yönlendirme             │ Named Pipe İkili RPC
                  ▼                                               ▼
      ┌───────────────────────┐                       ┌───────────────────────┐
      │  jvm.dll JNIEnv Tablosu                       │     Exoproc Ajanı     │

@@ -1,6 +1,6 @@
 {
   "name": "exoproc-runtime",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "description": "Modular, identity-preserving hybrid/virtual/native Java runtime environment and class pool for the Exoproc / NJava ecosystem.",
   "main": "./dist/index.js",
   "exports": {

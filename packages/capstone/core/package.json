@@ -1,6 +1,6 @@
 {
   "name": "bun-capstone",
-  "version": "0.6.6",
+  "version": "0.7.0",
   "description": "TypeScript/FFI bindings for the Capstone disassembly engine with full OOP support",
   "main": "./dist/index.js",
   "exports": {
@@ -23,7 +23,7 @@
   ],
   "files": [
     "dist",
-    "deps",
+    "deps.json",
     "LICENSE"
   ],
   "license": "MIT",

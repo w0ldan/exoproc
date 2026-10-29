@@ -69,6 +69,7 @@
       "exoproc-jjit/remapper": ["./packages/java/jjit/src/remapper.ts"],
       "exoproc-jjit/builder": ["./packages/java/jjit/src/builder.ts"],
       "exoproc-jjit/modifiers": ["./packages/java/jjit/src/modifiers.ts"],
+      "exoproc-ipc": ["./packages/ipc/src/index.ts"],
       "njava-agent": ["./packages/java/agent/src/index.ts"],
       "exoproc-mcp": ["./packages/exoproc-mcp/src/index.ts"],
       "exoproc-runner": ["./packages/runner/src/index.ts"],
@@ -82,6 +83,9 @@
     },
     {
       "path": "./packages/utils"
+    },
+    {
+      "path": "./packages/ipc"
     },
     {
       "path": "./packages/win32/abi"

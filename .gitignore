@@ -13,11 +13,13 @@ coverage/
 # Build outputs
 **/dist/
 dist-tests/
+release-assets/
 **/deps/
 build/
 /exoproc.js
 /exoproc.tar.gz
 *.tgz
+*.exe
 **/.open-next/
 **/.next/
 **/target/

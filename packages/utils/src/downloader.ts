@@ -9,14 +9,16 @@ import {
   readdirSync,
   statSync,
   copyFileSync,
+  writeFileSync,
 } from 'fs';
+import { inflateRawSync } from 'zlib';
 import { pipeline } from 'stream/promises';
 import { rm } from 'fs/promises';
 import { rmSync } from 'fs';
 import { join, dirname, basename, resolve, isAbsolute } from 'path';
 import { tmpdir } from 'os';
 import { randomBytes, createHash } from 'crypto';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { Parse } from 'unzipper';
 import { spinner } from '@clack/prompts';
 import pc from 'picocolors';
@@ -116,16 +118,89 @@ export async function downloadFile(
     throw new Error(`Failed to download from ${url}: Empty response body`);
   }
   const destDir = dirname(destPath);
-  mkdirSync(destDir, { recursive: true });
+  if (destDir && destDir !== '.' && !existsSync(destDir)) {
+    mkdirSync(destDir, { recursive: true });
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await pipeline(response.body as any, createWriteStream(destPath));
 }
 
 export function downloadFileSync(url: string, destPath: string): void {
   const destDir = dirname(destPath);
-  mkdirSync(destDir, { recursive: true });
+  if (destDir && destDir !== '.' && !existsSync(destDir)) {
+    mkdirSync(destDir, { recursive: true });
+  }
 
-  // Use curl (built into Linux, macOS, and modern Windows 10/11)
+  const dlScript = `
+fetch(${JSON.stringify(url)}).then(function(r) {
+  if (!r.ok) { process.exit(1); }
+  return r.arrayBuffer();
+}).then(function(ab) {
+  require('node:fs').writeFileSync(${JSON.stringify(destPath)}, Buffer.from(ab));
+  process.exit(0);
+}).catch(function() {
+  process.exit(1);
+});
+`.trim();
+
+  // 1. Try using the current process executable (Bun, Node, or compiled exoproc executable)
+  const execPath = process.execPath;
+  if (execPath) {
+    const execBase = basename(execPath).toLowerCase();
+    if (execBase.includes('node') || execBase.includes('bun')) {
+      try {
+        const res = spawnSync(execPath, ['-e', dlScript], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 120000,
+        });
+        if (
+          res.status === 0 &&
+          existsSync(destPath) &&
+          statSync(destPath).size > 0
+        ) {
+          return;
+        }
+      } catch {}
+    } else {
+      // Compiled executable (e.g. exoproc / exoproc.exe) invoking its internal download command
+      try {
+        const res = spawnSync(
+          execPath,
+          ['__internal_download', url, destPath],
+          {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            timeout: 120000,
+          },
+        );
+        if (
+          res.status === 0 &&
+          existsSync(destPath) &&
+          statSync(destPath).size > 0
+        ) {
+          return;
+        }
+      } catch {}
+    }
+  }
+
+  // 2. Try global bun or node binaries if in PATH
+  for (const bin of ['bun', 'node']) {
+    try {
+      const res = spawnSync(bin, ['-e', dlScript], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 120000,
+      });
+      if (
+        res.status === 0 &&
+        existsSync(destPath) &&
+        statSync(destPath).size > 0
+      ) {
+        return;
+      }
+    } catch {}
+  }
+
+  // 3. Fallback: curl if available as last resort
   try {
     execSync(`curl -fsSL -o "${destPath}" "${url}"`, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -134,21 +209,7 @@ export function downloadFileSync(url: string, destPath: string): void {
     if (existsSync(destPath) && statSync(destPath).size > 0) {
       return;
     }
-  } catch {
-    // curl failed, try powershell on Windows
-    if (process.platform === 'win32') {
-      execSync(
-        `powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('${url}', '${destPath}')"`,
-        {
-          stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: 120000,
-        },
-      );
-      if (existsSync(destPath) && statSync(destPath).size > 0) {
-        return;
-      }
-    }
-  }
+  } catch {}
 
   throw new Error(`Synchronous download failed for ${url}`);
 }
@@ -159,7 +220,10 @@ export function extractEntryFromZip(
   entryName: string,
 ): Promise<void> {
   return new Promise((resolvePromise, rejectPromise) => {
-    mkdirSync(dirname(destFile), { recursive: true });
+    const destDir = dirname(destFile);
+    if (destDir && destDir !== '.' && !existsSync(destDir)) {
+      mkdirSync(destDir, { recursive: true });
+    }
 
     let found = false;
     const readStream = createReadStream(zipPath);
@@ -199,78 +263,127 @@ export function extractEntryFromZip(
   });
 }
 
+/**
+ * Synchronous ZIP entry extraction in 100% pure TypeScript/JavaScript.
+ * Operates entirely in-memory using Node/Bun's native zlib.inflateRawSync,
+ * requiring zero external binaries (no PowerShell, no unzip, no python).
+ */
 export function extractEntryFromZipSync(
   zipPath: string,
   destFile: string,
   entryName: string,
 ): void {
-  mkdirSync(dirname(destFile), { recursive: true });
+  const destDir = dirname(destFile);
+  if (destDir && destDir !== '.' && !existsSync(destDir)) {
+    mkdirSync(destDir, { recursive: true });
+  }
 
-  if (process.platform === 'win32') {
-    // PowerShell extraction
-    const tempExtract = join(
-      tmpdir(),
-      `exoproc-zip-${randomBytes(6).toString('hex')}`,
+  const zipBuf = readFileSync(zipPath);
+
+  // Locate End of Central Directory Record (EOCD).
+  // Signature is 0x06054b50 (PK\x05\x06), min size 22 bytes.
+  let eocdOffset = -1;
+  const maxComment = 65535;
+  const minEocdSearch = Math.max(0, zipBuf.length - 22 - maxComment);
+  for (let i = zipBuf.length - 22; i >= minEocdSearch; i--) {
+    if (zipBuf.readUInt32LE(i) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+
+  if (eocdOffset === -1) {
+    throw new Error(
+      `Invalid ZIP archive ${zipPath}: End of Central Directory record not found`,
     );
-    mkdirSync(tempExtract, { recursive: true });
-    try {
-      execSync(
-        `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tempExtract}' -Force"`,
-        {
-          stdio: 'ignore',
-        },
+  }
+
+  const totalEntries = zipBuf.readUInt16LE(eocdOffset + 10);
+  const cdOffset = zipBuf.readUInt32LE(eocdOffset + 16);
+
+  const targetNameLower = entryName.toLowerCase();
+  const targetBaseName = basename(entryName).toLowerCase();
+
+  let currentOffset = cdOffset;
+  for (let i = 0; i < totalEntries; i++) {
+    if (currentOffset + 46 > zipBuf.length) {
+      break;
+    }
+
+    const sig = zipBuf.readUInt32LE(currentOffset);
+    if (sig !== 0x02014b50) {
+      throw new Error(
+        `Corrupt ZIP archive ${zipPath}: expected Central Directory signature 0x02014b50 at offset ${currentOffset}`,
       );
-      // Find the file
-      const found = findFileRecursive(tempExtract, entryName);
-      if (found) {
-        copyFileSync(found, destFile);
-      } else {
-        throw new Error(`Could not find ${entryName} in archive`);
-      }
-    } finally {
-      rmSync(tempExtract, { recursive: true, force: true });
     }
-  } else {
-    // unzip tool or python fallback
-    try {
-      execSync(`unzip -p "${zipPath}" "*${entryName}" > "${destFile}"`, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      if (existsSync(destFile) && statSync(destFile).size > 0) return;
-    } catch {}
 
-    // Python fallback
-    const pyScript = `
-import zipfile, sys
-with zipfile.ZipFile(sys.argv[1], 'r') as z:
-    for name in z.namelist():
-        if name.lower().endswith(sys.argv[3].lower()):
-            with open(sys.argv[2], 'wb') as f:
-                f.write(z.read(name))
-            sys.exit(0)
-sys.exit(1)
-`;
-    execSync(
-      `python3 -c "${pyScript.replace(/\n/g, ' ')}" "${zipPath}" "${destFile}" "${entryName}"`,
-      {
-        stdio: 'ignore',
-      },
+    const method = zipBuf.readUInt16LE(currentOffset + 10);
+    const compressedSize = zipBuf.readUInt32LE(currentOffset + 20);
+    const fileNameLen = zipBuf.readUInt16LE(currentOffset + 28);
+    const extraLen = zipBuf.readUInt16LE(currentOffset + 30);
+    const commentLen = zipBuf.readUInt16LE(currentOffset + 32);
+    const localHeaderOffset = zipBuf.readUInt32LE(currentOffset + 42);
+
+    const fileName = zipBuf.toString(
+      'utf8',
+      currentOffset + 46,
+      currentOffset + 46 + fileNameLen,
     );
-  }
-}
+    currentOffset += 46 + fileNameLen + extraLen + commentLen;
 
-function findFileRecursive(dir: string, targetName: string): string | null {
-  const items = readdirSync(dir, { withFileTypes: true });
-  for (const item of items) {
-    const full = join(dir, item.name);
-    if (item.isDirectory()) {
-      const res = findFileRecursive(full, targetName);
-      if (res) return res;
-    } else if (item.name.toLowerCase() === targetName.toLowerCase()) {
-      return full;
+    const fileBaseName = basename(fileName).toLowerCase();
+    const fileNameLower = fileName.toLowerCase();
+
+    if (
+      fileNameLower === targetNameLower ||
+      fileBaseName === targetBaseName ||
+      fileNameLower.endsWith('/' + targetNameLower) ||
+      fileNameLower.endsWith('\\' + targetNameLower)
+    ) {
+      // Read Local File Header
+      if (localHeaderOffset + 30 > zipBuf.length) {
+        throw new Error(
+          `Corrupt ZIP archive ${zipPath}: invalid local header offset`,
+        );
+      }
+
+      const localSig = zipBuf.readUInt32LE(localHeaderOffset);
+      if (localSig !== 0x04034b50) {
+        throw new Error(
+          `Corrupt ZIP archive ${zipPath}: expected Local Header signature 0x04034b50 at offset ${localHeaderOffset}`,
+        );
+      }
+
+      const localNameLen = zipBuf.readUInt16LE(localHeaderOffset + 26);
+      const localExtraLen = zipBuf.readUInt16LE(localHeaderOffset + 28);
+      const dataOffset = localHeaderOffset + 30 + localNameLen + localExtraLen;
+
+      if (dataOffset + compressedSize > zipBuf.length) {
+        throw new Error(`Corrupt ZIP archive ${zipPath}: truncated entry data`);
+      }
+
+      const compressedData = zipBuf.subarray(
+        dataOffset,
+        dataOffset + compressedSize,
+      );
+      let decompressed: Buffer;
+
+      if (method === 0) {
+        decompressed = compressedData;
+      } else if (method === 8) {
+        decompressed = inflateRawSync(compressedData);
+      } else {
+        throw new Error(
+          `Unsupported ZIP compression method ${method} for entry ${fileName} in ${zipPath}`,
+        );
+      }
+
+      writeFileSync(destFile, decompressed);
+      return;
     }
   }
-  return null;
+
+  throw new Error(`Could not find ${entryName} in archive ${zipPath}`);
 }
 
 export function extractAllFromZip(
@@ -348,7 +461,7 @@ export async function resolveOrDownloadDep(
   const logMessage = (msg: string) => {
     if (!silent) {
       if (onProgress) onProgress(msg);
-      else console.log(msg);
+      else console.error(msg);
     }
   };
 
@@ -423,7 +536,7 @@ export function resolveOrDownloadDepSync(
   const logMessage = (msg: string) => {
     if (!silent) {
       if (onProgress) onProgress(msg);
-      else console.log(msg);
+      else console.error(msg);
     }
   };
 

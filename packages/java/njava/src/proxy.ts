@@ -12,7 +12,9 @@ import {
   type JavaClassMappingOptions,
 } from './mapping.js';
 import { buildExtendedClassAdapter } from './adapter.js';
+import { createAgentContext } from './agent-bridge.js';
 import { compileJavaSync, resolveDefaultJavaPath } from './compiler.js';
+import { injectAgent, injectAgentSync } from 'njava-agent';
 
 export type JavaClassProxy = any;
 export type JavaObjectProxy = any;
@@ -138,7 +140,10 @@ export function createJavaClassProxy(
   }
 
   const superclassChain: string[] = [];
-  if (sync && reflectedClass.getSuperclassChainSync) {
+  if (
+    (sync || (bridge as any)?.isAgentBridge) &&
+    reflectedClass.getSuperclassChainSync
+  ) {
     try {
       const ch = reflectedClass.getSuperclassChainSync();
       if (Array.isArray(ch)) superclassChain.push(...ch);
@@ -313,7 +318,12 @@ export function createJavaClassProxy(
               0n,
               unwrappedArgs,
             );
-            return wrapJavaReturnValue(res, method.type, bridge, false, mapper);
+            return await wrapJavaReturnValueAsync(
+              res,
+              method.type,
+              bridge,
+              mapper,
+            );
           };
         }
       }
@@ -343,7 +353,7 @@ export function createJavaClassProxy(
           return bridge
             .readField(reflectedClass.classObj, field.name, 0n)
             .then((val) =>
-              wrapJavaReturnValue(val, field!.type, bridge, false, mapper),
+              wrapJavaReturnValueAsync(val, field!.type, bridge, mapper),
             );
         }
       }
@@ -398,11 +408,10 @@ export function createJavaClassProxy(
                   0n,
                   unwrappedArgs,
                 );
-                return wrapJavaReturnValue(
+                return await wrapJavaReturnValueAsync(
                   res,
                   method.type,
                   bridge,
-                  false,
                   mapper,
                 );
               }
@@ -418,7 +427,12 @@ export function createJavaClassProxy(
                 f.name,
                 0n,
               );
-              return wrapJavaReturnValue(val, f.type, bridge, false, mapper);
+              return await wrapJavaReturnValueAsync(
+                val,
+                f.type,
+                bridge,
+                mapper,
+              );
             }
             throw new Error(
               `Static member "${propStr}" (mapped: "${actualFieldName}") not found on ${deobfClassName}`,
@@ -524,7 +538,10 @@ export function createJavaObjectProxy(
   }
 
   const superclassChain: string[] = [];
-  if (sync && reflectedClass.getSuperclassChainSync) {
+  if (
+    (sync || (bridge as any)?.isAgentBridge) &&
+    reflectedClass.getSuperclassChainSync
+  ) {
     try {
       const ch = reflectedClass.getSuperclassChainSync();
       if (Array.isArray(ch)) superclassChain.push(...ch);
@@ -734,7 +751,12 @@ export function createJavaObjectProxy(
               objPtr,
               unwrappedArgs,
             );
-            return wrapJavaReturnValue(res, method.type, bridge, false, mapper);
+            return await wrapJavaReturnValueAsync(
+              res,
+              method.type,
+              bridge,
+              mapper,
+            );
           };
         }
       }
@@ -746,7 +768,7 @@ export function createJavaObjectProxy(
       if (!field && sync && reflectedClass.findFieldSync) {
         field =
           reflectedClass.findFieldSync(actualFieldName) ??
-          (actualFieldName !== propStr
+          (actNameFromField(actualFieldName, propStr)
             ? reflectedClass.findFieldSync(propStr)
             : undefined);
         if (field) fieldCache.set(actualFieldName, field);
@@ -764,7 +786,7 @@ export function createJavaObjectProxy(
           return bridge
             .readField(reflectedClass.classObj, field.name, objPtr)
             .then((val) =>
-              wrapJavaReturnValue(val, field!.type, bridge, false, mapper),
+              wrapJavaReturnValueAsync(val, field!.type, bridge, mapper),
             );
         }
       }
@@ -819,11 +841,10 @@ export function createJavaObjectProxy(
                   objPtr,
                   unwrappedArgs,
                 );
-                return wrapJavaReturnValue(
+                return await wrapJavaReturnValueAsync(
                   res,
                   method.type,
                   bridge,
-                  false,
                   mapper,
                 );
               }
@@ -839,7 +860,12 @@ export function createJavaObjectProxy(
                 f.name,
                 objPtr,
               );
-              return wrapJavaReturnValue(val, f.type, bridge, false, mapper);
+              return await wrapJavaReturnValueAsync(
+                val,
+                f.type,
+                bridge,
+                mapper,
+              );
             }
             throw new Error(
               `Member "${propStr}" (mapped: "${actualFieldName}") not found on instance of ${deobfClassName}`,
@@ -1006,6 +1032,125 @@ function constructInstance(
       );
     })();
   }
+}
+
+function actNameFromField(actualFieldName: string, propStr: string): boolean {
+  return actualFieldName !== propStr;
+}
+
+async function wrapJavaReturnValueAsync(
+  val: any,
+  typeHint: string | null | undefined,
+  bridge: ReflectionBridge,
+  mapper?: JavaMappingRegistry,
+): Promise<any> {
+  if (val === null || val === undefined) return val;
+
+  if (typeof val === 'bigint' && val !== 0n) {
+    const cleanType = typeHint
+      ? typeHint.replace(/^(class|interface)\s+/, '').trim()
+      : '';
+    if (
+      cleanType === 'int' ||
+      cleanType === 'boolean' ||
+      cleanType === 'double' ||
+      cleanType === 'float' ||
+      cleanType === 'long' ||
+      cleanType === 'short' ||
+      cleanType === 'byte' ||
+      cleanType === 'char'
+    ) {
+      return val;
+    }
+
+    try {
+      let clsName = cleanType;
+      if (!clsName || clsName === 'java.lang.Object' || clsName === 'Object') {
+        if (bridge.getObjectClassName) {
+          clsName = await bridge.getObjectClassName(val);
+        }
+      }
+      if (clsName && clsName !== 'java.lang.String') {
+        const cls = await bridge.getClass(clsName);
+        return createJavaObjectProxy(val, cls, bridge, false, mapper);
+      }
+    } catch {}
+  }
+
+  return val;
+}
+
+function createLazyAsyncClassProxy(
+  deobfClassName: string,
+  promise: Promise<JavaClassProxy>,
+  bridge: ReflectionBridge,
+  mapper?: JavaMappingRegistry,
+): JavaClassProxy {
+  const lazyTarget = function (...args: any[]) {
+    return promise.then((clsProxy) => (clsProxy as any)(...args));
+  };
+
+  return new Proxy(lazyTarget, {
+    construct(_t, args) {
+      return promise.then((clsProxy) => new (clsProxy as any)(...args)) as any;
+    },
+    get(_t, prop) {
+      if (typeof prop === 'symbol') {
+        if (prop === IS_JAVA_CLASS) return true;
+        if (prop === BRIDGE) return bridge;
+        if (prop === SYNC_MODE) return false;
+        if (prop === MAPPER) return mapper;
+        if (prop === Symbol.toPrimitive) {
+          return () => `[JavaClass ${deobfClassName}]`;
+        }
+        return undefined;
+      }
+      if (prop === 'then') return undefined;
+      if (prop === '$className' || prop === 'name') return deobfClassName;
+      if (prop === 'getName') return () => deobfClassName;
+      if (prop === 'getSimpleName') {
+        return () => {
+          const parts = deobfClassName.split('.');
+          return parts[parts.length - 1] ?? deobfClassName;
+        };
+      }
+      if (prop === 'toString' || prop === 'valueOf') {
+        return () => `[JavaClass ${deobfClassName}]`;
+      }
+      if (prop === '$class' || prop === 'class') {
+        return promise.then((clsProxy) => (clsProxy as any).class);
+      }
+
+      const memberInvoker: any = (...args: any[]) =>
+        promise.then((clsProxy) => {
+          const member = (clsProxy as any)[prop];
+          if (typeof member === 'function') {
+            return member(...args);
+          }
+          return member;
+        });
+
+      memberInvoker.then = (
+        onFulfilled?: (v: any) => any,
+        onRejected?: (e: any) => any,
+      ) =>
+        promise
+          .then((clsProxy) => (clsProxy as any)[prop])
+          .then(onFulfilled, onRejected);
+
+      memberInvoker.catch = (onRejected?: (e: any) => any) =>
+        memberInvoker.then(undefined, onRejected);
+
+      return memberInvoker;
+    },
+    set(_t, prop, value) {
+      if (typeof prop === 'symbol') return true;
+      void promise.then((clsProxy) => {
+        (clsProxy as any)[prop] = value;
+      });
+      return true;
+    },
+  });
 }
 
 function wrapJavaReturnValue(
@@ -1312,42 +1457,38 @@ export class JavaContext {
       const cls = this.bridge.getClassSync(obfName);
       return createJavaClassProxy(cls, this.bridge, true, this.mapper);
     } else {
-      const promise = this.bridge
-        .getClass(obfName)
-        .then((cls) =>
-          createJavaClassProxy(cls, this.bridge, false, this.mapper),
-        );
-      return createJavaClassProxy(
-        new Proxy({} as any, {
-          get(_t, p) {
-            return (...args: any[]) =>
-              promise.then((proxy) => (proxy as any)[p](...args));
-          },
-        }),
+      if (this.bridge.getClassSync) {
+        try {
+          const cls = this.bridge.getClassSync(obfName);
+          return createJavaClassProxy(cls, this.bridge, false, this.mapper);
+        } catch {}
+      }
+      const deobfName = this.mapper
+        ? this.mapper.resolveDeobfClass(obfName)
+        : name;
+      const promise = this.typeAsync(name);
+      return createLazyAsyncClassProxy(
+        deobfName,
+        promise,
         this.bridge,
-        false,
         this.mapper,
       );
     }
   }
 
   /**
-   * Dynamically loads and starts the NJava Agent inside the target JVM via URLClassLoader,
-   * returning an in-process Agent JavaContext.
-   */
-  /**
-   * Dynamically loads and starts the NJava Agent inside the target JVM,
+   * Dynamically loads and starts the Exoproc Java Agent inside the target JVM,
    * preferring fast in-memory bytecode injection (ClassLoader.defineClass),
-   * returning an in-process Agent JavaContext.
+   * returning an in-process Named Pipe Agent JavaContext.
    */
   public async transitionToAgent(options?: any): Promise<JavaContext> {
-    const { injectAgent } = await import('njava-agent');
     const result = await injectAgent(this, options);
     if (!result.agentContext) {
-      const { createAgentContext } = await import('./agent-bridge.js');
       result.agentContext = createAgentContext({
-        port: result.port,
-        sync: this.sync,
+        server: result.server,
+        pipePath: result.pipePath,
+        clientId: result.clientId,
+        sync: false,
         mapper: this.mapper,
       });
       if (this.detector) {
@@ -1406,14 +1547,13 @@ export class JavaContext {
    * Synchronous twin of transitionToAgent.
    */
   public transitionToAgentSync(options?: any): JavaContext {
-    const pkg = 'njava-agent';
-    const { injectAgentSync } = require(pkg);
     const result = injectAgentSync(this, options);
     if (!result.agentContext) {
-      const { createAgentContext } = require('./agent-bridge.js');
       result.agentContext = createAgentContext({
-        port: result.port,
-        sync: this.sync,
+        server: result.server,
+        pipePath: result.pipePath,
+        clientId: result.clientId,
+        sync: false,
         mapper: this.mapper,
       });
       if (this.detector) {
@@ -1463,20 +1603,76 @@ export class JavaContext {
     }
 
     const bridgeAny = this.bridge as any;
-    if (typeof bridgeAny.defineClassSync === 'function') {
+    if (this.sync && typeof bridgeAny.defineClassSync === 'function') {
+      bridgeAny.defineClassSync(
+        name,
+        bytes,
+        loader ? unwrapJava(loader) : undefined,
+      );
+      return this.type(name);
+    }
+
+    if (!this.sync && typeof bridgeAny.defineClass === 'function') {
+      const promise = bridgeAny
+        .defineClass(name, bytes)
+        .then(() => this.typeAsync(name));
+      return createLazyAsyncClassProxy(name, promise, this.bridge, this.mapper);
+    }
+
+    const Exoproc = this.type('org.exoproc.njava.agent.utils.Exoproc');
+    if (Exoproc && typeof Exoproc.defineClass === 'function') {
+      Exoproc.defineClass(name, Array.from(bytes));
+    }
+
+    return this.type(name);
+  }
+
+  /**
+   * Asynchronously defines a class directly in JVM memory from raw bytecode.
+   */
+  public async defineClassAsync(
+    nameOrResult: string | any,
+    bytecode?: Uint8Array | Buffer,
+    loader?: any,
+  ): Promise<JavaClassProxy> {
+    let name: string;
+    let bytes: Uint8Array | Buffer;
+    if (typeof nameOrResult === 'string') {
+      name = nameOrResult;
+      bytes = bytecode!;
+    } else if (nameOrResult?.className && nameOrResult?.bytecode) {
+      name = nameOrResult.className;
+      bytes = nameOrResult.bytecode;
+    } else if (nameOrResult?.classes?.entries) {
+      const first = nameOrResult.classes.entries().next().value;
+      name = first[0];
+      bytes = first[1];
+    } else {
+      throw new Error(
+        'Invalid arguments to Java.defineClassAsync: expected (name, bytecode) or compileResult',
+      );
+    }
+
+    const bridgeAny = this.bridge as any;
+    if (typeof bridgeAny.defineClass === 'function') {
+      await bridgeAny.defineClass(
+        name,
+        bytes,
+        loader ? unwrapJava(loader) : undefined,
+      );
+    } else if (typeof bridgeAny.defineClassSync === 'function') {
       bridgeAny.defineClassSync(
         name,
         bytes,
         loader ? unwrapJava(loader) : undefined,
       );
     } else {
-      const Exoproc = this.type('org.exoproc.njava.agent.utils.Exoproc');
-      if (Exoproc && typeof Exoproc.defineClass === 'function') {
-        Exoproc.defineClass(name, Array.from(bytes));
-      }
+      const Exoproc = await this.typeAsync(
+        'org.exoproc.njava.agent.utils.Exoproc',
+      );
+      await Exoproc.defineClass(name, Array.from(bytes));
     }
-
-    return this.type(name);
+    return await this.typeAsync(name);
   }
 
   /**
@@ -1539,6 +1735,47 @@ export class JavaContext {
 
     const rawPtr = unwrapJava(javaObj);
     if (typeof rawPtr !== 'bigint') return javaObj;
+
+    if (!this.sync) {
+      return (async () => {
+        let clsName =
+          typeof classNameOrClass === 'string'
+            ? this.mapper.resolveObfClass(classNameOrClass)
+            : undefined;
+        if (!clsName && this.bridge.getObjectClassName) {
+          try {
+            clsName = await this.bridge.getObjectClassName(rawPtr);
+          } catch {}
+        }
+        const cls =
+          classNameOrClass instanceof Object && 'classObj' in classNameOrClass
+            ? (classNameOrClass as ReflectedClass)
+            : await this.bridge.getClass(clsName ?? 'java.lang.Object');
+        const proxy = createJavaObjectProxy(
+          rawPtr,
+          cls,
+          this.bridge,
+          false,
+          this.mapper,
+        );
+        if (
+          typeof proxy.size === 'function' &&
+          typeof proxy.get === 'function'
+        ) {
+          try {
+            const count = await proxy.size();
+            if (typeof count === 'number') {
+              const result: any[] = [];
+              for (let i = 0; i < count; i++) {
+                result.push(await proxy.get(i));
+              }
+              return result;
+            }
+          } catch {}
+        }
+        return proxy;
+      })();
+    }
 
     // Check if it's a Java List/Collection and convert to native JS array
     if (this.sync && this.bridge.getClassSync) {
@@ -1657,6 +1894,16 @@ export class JavaContext {
       typeStr === 'List' ||
       typeStr === 'ArrayList'
     ) {
+      if (!this.sync) {
+        return (async () => {
+          const ArrayList = await this.typeAsync('java.util.ArrayList');
+          const list = await new ArrayList(jsArray.length);
+          for (const item of jsArray) {
+            await list.add(item);
+          }
+          return list;
+        })();
+      }
       const ArrayList = this.type('java.util.ArrayList');
       const list = new ArrayList(jsArray.length);
       for (const item of jsArray) {
@@ -1668,6 +1915,29 @@ export class JavaContext {
     // 2. Convert to Java Object Array (e.g. "java.lang.String[]", "java.lang.Object[]")
     if (typeStr.endsWith('[]')) {
       const elemTypeName = typeStr.slice(0, -2);
+      if (!this.sync) {
+        return (async () => {
+          const fullElemName =
+            elemTypeName === 'String'
+              ? 'java.lang.String'
+              : elemTypeName === 'Object'
+                ? 'java.lang.Object'
+                : elemTypeName;
+          const obfElemName = this.mapper.resolveObfClass(fullElemName);
+          const elemClass = await this.bridge.getClass(obfElemName);
+          const ReflectArray = await this.typeAsync('java.lang.reflect.Array');
+          const ClassCls = await this.typeAsync('java.lang.Class');
+          const javaClassObj = await ClassCls.forName(elemClass.name);
+          const arrObj = await ReflectArray.newInstance(
+            javaClassObj,
+            jsArray.length,
+          );
+          for (let i = 0; i < jsArray.length; i++) {
+            await ReflectArray.set(arrObj, i, jsArray[i]);
+          }
+          return arrObj;
+        })();
+      }
       if (this.sync && this.bridge.getClassSync) {
         const fullElemName =
           elemTypeName === 'String'
@@ -1751,7 +2021,8 @@ export class JavaContext {
     if (typeof task === 'function') {
       return await task(this, print);
     }
-    const fn = new Function('Java', 'print', String(task));
+    const AsyncFn = Object.getPrototypeOf(async function () {}).constructor;
+    const fn = new AsyncFn('Java', 'print', String(task));
     return await fn(this, print);
   }
 
@@ -1772,7 +2043,8 @@ export class JavaContext {
       logs.push(args.map(String).join(' '));
     };
     try {
-      const fn = new Function('Java', 'print', script);
+      const AsyncFn = Object.getPrototypeOf(async function () {}).constructor;
+      const fn = new AsyncFn('Java', 'print', script);
       const result = await fn(this, print);
       return { success: true, result, logs };
     } catch (e: any) {
@@ -1818,6 +2090,32 @@ export class JavaContext {
       bytecode =
         compRes.classes.get(res.className) ??
         compRes.classes.values().next().value;
+    }
+
+    if (!this.sync) {
+      const bridgeAny = this.bridge as any;
+      if (bytecode && typeof bridgeAny.defineClass === 'function') {
+        const promise = bridgeAny
+          .defineClass(res.className, bytecode)
+          .then(async () => {
+            const subCls = await this.bridge.getClass(res.className);
+            return createJavaClassProxy(
+              subCls,
+              this.bridge,
+              false,
+              this.mapper,
+              undefined,
+              undefined,
+              res.hybridOverrides,
+            );
+          });
+        return createLazyAsyncClassProxy(
+          res.className,
+          promise,
+          this.bridge,
+          this.mapper,
+        );
+      }
     }
 
     if (bytecode) {

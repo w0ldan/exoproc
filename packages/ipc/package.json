@@ -1,0 +1,48 @@
+{
+  "name": "exoproc-ipc",
+  "publishConfig": {
+    "access": "public"
+  },
+  "version": "0.7.0",
+  "description": "Zero-port Named Pipe and local socket IPC hub for Exoproc Java agents, TinyCC shellcode, and native process instrumentation.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "exoproc",
+    "ipc",
+    "named-pipe",
+    "win32",
+    "rpc",
+    "instrumentation"
+  ],
+  "author": "Serkan",
+  "dependencies": {
+    "exoproc-utils": "workspace:*"
+  },
+  "homepage": "https://github.com/w0ldan/exoproc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w0ldan/exoproc.git",
+    "directory": "packages/ipc"
+  },
+  "bugs": {
+    "url": "https://github.com/w0ldan/exoproc/issues"
+  }
+}

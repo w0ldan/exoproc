@@ -1,12 +1,14 @@
 {
   "name": "njava-agent",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "description": "Universal dynamic in-process Java instrumentation agent and headless reflection bridge builder.",
   "main": "./dist/index.js",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./loader": {
       "types": "./dist/loader.d.ts",
@@ -53,6 +55,7 @@
   "author": "Serkan",
   "homepage": "https://github.com/w0ldan/exoproc#readme",
   "dependencies": {
+    "exoproc-ipc": "workspace:*",
     "exoproc-jjit": "workspace:*",
     "exoproc-utils": "workspace:*"
   },

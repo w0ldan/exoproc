@@ -57,9 +57,9 @@ export interface AgentBuildOptions {
   buildId?: string;
 
   /**
-   * Target port to bake into the agent (default: 43378).
+   * Default Named Pipe / socket path to bake into the agent.
    */
-  port?: number;
+  pipePath?: string;
 }
 
 export interface AgentBuildResult {
@@ -100,14 +100,24 @@ export interface AgentBytecodeResult {
   loadMappings?: (poolOrRegistry: any) => string;
 }
 
+function hashPipeSuffix(pipePath?: string): string {
+  if (!pipePath) return '';
+  let h = 2166136261;
+  for (let i = 0; i < pipePath.length; i++) {
+    h ^= pipePath.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return `-pipe_${(h >>> 0).toString(36)}`;
+}
+
 /**
  * Resolves the agent Java source files dynamically using JavaClassBuilder.
  */
 export function getAgentSources(options?: {
   buildId?: string;
-  port?: number;
+  pipePath?: string;
 }): Record<string, string> {
-  if (options?.buildId || options?.port !== undefined) {
+  if (options?.buildId || options?.pipePath !== undefined) {
     return getGeneratedAgentSources(options);
   }
   return { ...EMBEDDED_AGENT_SOURCES };
@@ -139,7 +149,7 @@ export function getAgentBytecodeSync(
     javaPath?: string;
     obfuscate?: boolean;
     buildId?: string;
-    port?: number;
+    pipePath?: string;
     cacheDir?: string;
   } = {},
 ): AgentBytecodeResult {
@@ -148,7 +158,7 @@ export function getAgentBytecodeSync(
     options.javaVersion ?? detectJavaVersionSync(javaPath) ?? 8;
   const cacheDir = options.cacheDir ?? getDefaultAgentCacheDir();
   const buildId = options.buildId ?? generateBuildId();
-  const sources = getAgentSources({ buildId, port: options.port });
+  const sources = getAgentSources({ buildId, pipePath: options.pipePath });
   const exoprocSrc = sources['org/exoproc/njava/agent/utils/Exoproc.java'];
   if (!exoprocSrc) {
     throw new Error('Exoproc.java source not found');
@@ -214,7 +224,7 @@ export async function getAgentBytecode(
     javaPath?: string;
     obfuscate?: boolean;
     buildId?: string;
-    port?: number;
+    pipePath?: string;
     cacheDir?: string;
   } = {},
 ): Promise<AgentBytecodeResult> {
@@ -223,7 +233,7 @@ export async function getAgentBytecode(
     options.javaVersion ?? (await detectJavaVersion(javaPath)) ?? 8;
   const cacheDir = options.cacheDir ?? getDefaultAgentCacheDir();
   const buildId = options.buildId ?? generateBuildId();
-  const sources = getAgentSources({ buildId, port: options.port });
+  const sources = getAgentSources({ buildId, pipePath: options.pipePath });
   const exoprocSrc = sources['org/exoproc/njava/agent/utils/Exoproc.java'];
   if (!exoprocSrc) {
     throw new Error('Exoproc.java source not found');
@@ -289,16 +299,15 @@ export function getAgentJarSync(
   const javaVersion =
     options.javaVersion ?? detectJavaVersionSync(javaPath) ?? 8;
   const cacheDir = options.cacheDir ?? getDefaultAgentCacheDir();
-  const portSuffix =
-    options.port && options.port !== 43378 ? `-p${options.port}` : '';
+  const pipeSuffix = hashPipeSuffix(options.pipePath);
   const targetJarPath =
     options.outputPath ??
     resolve(
       join(
         cacheDir,
         options.obfuscate
-          ? `njava-agent-java${javaVersion}${portSuffix}-obf.jar`
-          : `njava-agent-java${javaVersion}${portSuffix}.jar`,
+          ? `exoproc-agent-java${javaVersion}${pipeSuffix}-obf.jar`
+          : `exoproc-agent-java${javaVersion}${pipeSuffix}.jar`,
       ),
     );
   const targetTinyPath = targetJarPath.replace(/\.jar$/, '.tiny');
@@ -330,7 +339,7 @@ export function getAgentJarSync(
 
   // Compile on-the-fly dynamically
   const buildId = options.buildId ?? generateBuildId();
-  const sources = getAgentSources({ buildId, port: options.port });
+  const sources = getAgentSources({ buildId, pipePath: options.pipePath });
   const targetVersion = javaVersion < 17 ? '-1.8' : `-${javaVersion}`;
   const sourceVersion = javaVersion < 17 ? '-1.8' : `-${javaVersion}`;
 
@@ -404,16 +413,15 @@ export async function getAgentJar(
   const javaVersion =
     options.javaVersion ?? (await detectJavaVersion(javaPath)) ?? 8;
   const cacheDir = options.cacheDir ?? getDefaultAgentCacheDir();
-  const portSuffix =
-    options.port && options.port !== 43378 ? `-p${options.port}` : '';
+  const pipeSuffix = hashPipeSuffix(options.pipePath);
   const targetJarPath =
     options.outputPath ??
     resolve(
       join(
         cacheDir,
         options.obfuscate
-          ? `njava-agent-java${javaVersion}${portSuffix}-obf.jar`
-          : `njava-agent-java${javaVersion}${portSuffix}.jar`,
+          ? `exoproc-agent-java${javaVersion}${pipeSuffix}-obf.jar`
+          : `exoproc-agent-java${javaVersion}${pipeSuffix}.jar`,
       ),
     );
   const targetTinyPath = targetJarPath.replace(/\.jar$/, '.tiny');
@@ -445,7 +453,7 @@ export async function getAgentJar(
 
   // Compile on-the-fly dynamically
   const buildId = options.buildId ?? generateBuildId();
-  const sources = getAgentSources({ buildId, port: options.port });
+  const sources = getAgentSources({ buildId, pipePath: options.pipePath });
   const targetVersion = javaVersion < 17 ? '-1.8' : `-${javaVersion}`;
   const sourceVersion = javaVersion < 17 ? '-1.8' : `-${javaVersion}`;
 

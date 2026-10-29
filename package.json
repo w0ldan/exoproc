@@ -1,6 +1,6 @@
 {
   "name": "exoproc-monorepo",
-  "version": "0.6.11",
+  "version": "0.7.0",
   "private": true,
   "description": "TypeScript toolkit for Windows x64 native systems programming, memory manipulation, and process instrumentation.",
   "type": "module",
@@ -40,9 +40,11 @@
   "scripts": {
     "build": "bun run scripts/build.ts",
     "build:clean": "bun run clean && bun run build",
-    "clean": "find . -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null; rm -rf dist-tests tests/dist; rm -f exoproc.js exoproc.tar.gz *.tgz packages/simulate/crt-*; find . -name '*.tsbuildinfo' -not -path '*/node_modules/*' -delete 2>/dev/null; true",
+    "build:standalone": "STANDALONE_BUNDLE=1 bun run scripts/build.ts",
+    "clean": "find . -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null; rm -rf dist-tests tests/dist release-assets; rm -f exoproc.js exoproc.tar.gz *.tgz *.exe packages/simulate/crt-*; find . -name '*.tsbuildinfo' -not -path '*/node_modules/*' -delete 2>/dev/null; true",
     "deps": "bun -e \"import { downloadAllWorkspaceDeps } from 'exoproc-utils'; await downloadAllWorkspaceDeps(process.cwd());\"",
     "mcp": "bun run packages/exoproc-mcp/dist/index.js",
+    "compile": "bun run scripts/compile.ts",
     "exoproc": "bun run packages/exoproc/dist/cli.js",
     "setup": "bun run packages/exoproc/dist/cli.js setup",
     "doctor": "bun run packages/exoproc/dist/cli.js doctor",

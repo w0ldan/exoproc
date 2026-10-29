@@ -1,6 +1,6 @@
 {
   "name": "exoproc-asm",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "description": "Dependency-free typed x64 assembler for Exoproc.",
   "type": "module",
   "sideEffects": false,

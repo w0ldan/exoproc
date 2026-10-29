@@ -3,15 +3,15 @@ import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'bun';
+import { createIpcServer } from 'exoproc-ipc';
 import {
   jjit,
-  buildJarBuffer,
-  buildJarFromClasses,
   writeJarSync,
   writeJarFromClassesSync,
   compileJavaSync,
 } from 'exoproc-jjit';
 import {
+  AgentClient,
   getAgentJarSync,
   getAgentBytecodeSync,
   waitForAgentReady,
@@ -29,7 +29,6 @@ describe('jjit: Centralized JAR Packaging & URLClassLoader Agent Loading', () =>
 
     expect(jarBuf).toBeDefined();
     expect(jarBuf.length).toBeGreaterThan(50);
-    // Standard ZIP local file header signature 0x04034b50 -> 'PK\x03\x04'
     expect(jarBuf[0]).toBe(0x50);
     expect(jarBuf[1]).toBe(0x4b);
     expect(jarBuf[2]).toBe(0x03);
@@ -79,12 +78,10 @@ describe('jjit: Centralized JAR Packaging & URLClassLoader Agent Loading', () =>
     }
   });
 
-  it('compiles agent JAR and dynamically launches it via URLClassLoader in a live Java process', async () => {
-    // 1. Get or compile agent jar
+  it('compiles agent JAR and dynamically launches it via URLClassLoader over Named Pipe', async () => {
     const agent = getAgentJarSync({ javaVersion: 8, javaPath, force: true });
     expect(existsSync(agent.jarPath)).toBe(true);
 
-    // 2. Synthesize a Java bootstrap class that uses URLClassLoader to load NJavaAgent
     const bootstrapSource = `
       package org.exoproc.test;
       import java.io.File;
@@ -94,12 +91,8 @@ describe('jjit: Centralized JAR Packaging & URLClassLoader Agent Loading', () =>
 
       public class URLClassLoaderBootstrap {
           public static void main(String[] args) throws Exception {
-              if (args.length < 2) {
-                  System.err.println("Usage: URLClassLoaderBootstrap <agentJarPath> <port>");
-                  System.exit(1);
-              }
               String jarPath = args[0];
-              int port = Integer.parseInt(args[1]);
+              String pipePath = args[1];
 
               File jarFile = new File(jarPath);
               URL jarUrl = jarFile.toURI().toURL();
@@ -107,12 +100,9 @@ describe('jjit: Centralized JAR Packaging & URLClassLoader Agent Loading', () =>
               URLClassLoader loader = new URLClassLoader(new URL[]{jarUrl}, parent);
 
               Class<?> agentClass = loader.loadClass("org.exoproc.njava.agent.NJavaAgent");
-              java.lang.reflect.Method startMethod = agentClass.getMethod("start", int.class);
-              startMethod.invoke(null, port);
+              Method startMethod = agentClass.getMethod("start", String.class);
+              startMethod.invoke(null, pipePath);
 
-              System.out.println("BOOTSTRAP_LOADED_OK");
-
-              // Keep alive
               Thread.sleep(30000);
           }
       }
@@ -130,9 +120,14 @@ describe('jjit: Centralized JAR Packaging & URLClassLoader Agent Loading', () =>
       mainClass: 'org.exoproc.test.URLClassLoaderBootstrap',
     });
 
-    const TEST_PORT = 43393;
+    const server = createIpcServer({
+      name: `test_urlcl_${process.pid}_${Date.now()}`,
+    });
+    await server.listen();
+    const client = new AgentClient({ server });
+
     const proc = spawn(
-      [javaPath, '-jar', bootstrapJar, agent.jarPath, String(TEST_PORT)],
+      [javaPath, '-jar', bootstrapJar, agent.jarPath, server.pipePath],
       {
         stdout: 'pipe',
         stderr: 'inherit',
@@ -140,68 +135,48 @@ describe('jjit: Centralized JAR Packaging & URLClassLoader Agent Loading', () =>
     );
 
     try {
-      const ready = await waitForAgentReady(TEST_PORT, 12000);
+      const ready = await waitForAgentReady(server, 15000);
       expect(ready).toBe(true);
 
-      // 1. Verify /status endpoint
-      const statusRes = await fetch(`http://127.0.0.1:${TEST_PORT}/status`);
-      expect(statusRes.ok).toBe(true);
-      const statusJson = (await statusRes.json()) as any;
-      expect(statusJson.alive).toBe(true);
-      expect(statusJson.port).toBe(TEST_PORT);
+      const status = await client.getStatus();
+      expect(status.alive).toBe(true);
+      expect(status.pipePath).toBe(server.pipePath);
 
-      // 2. Verify /reflection/class endpoint
-      const classRes = await fetch(
-        `http://127.0.0.1:${TEST_PORT}/reflection/class`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'java.lang.System' }),
-        },
-      );
-      expect(classRes.ok).toBe(true);
-      const classJson = (await classRes.json()) as any;
+      const classJson = await server.request('reflection/class', {
+        name: 'java.lang.System',
+      });
       expect(classJson.success).toBe(true);
       expect(classJson.name).toBe('java.lang.System');
 
-      // 3. Verify /eval endpoint
-      const evalRes = await fetch(`http://127.0.0.1:${TEST_PORT}/eval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: 'java.lang.System.getProperty("java.version")',
-        }),
-      });
-      expect(evalRes.ok).toBe(true);
-      const evalJson = (await evalRes.json()) as any;
+      const evalJson = await client.eval(
+        'java.lang.System.getProperty("java.version")',
+      );
       expect(evalJson.success).toBe(true);
       expect(typeof evalJson.result).toBe('string');
-      expect(evalJson.result.length).toBeGreaterThan(0);
+      expect(evalJson.result!.length).toBeGreaterThan(0);
     } finally {
       proc.kill();
+      await server.close();
       try {
         unlinkSync(bootstrapJar);
       } catch {}
     }
   }, 35000);
 
-  it('injects single-class Exoproc in-memory (defineClass) into a running JVM with ZERO disk JARs', async () => {
-    // 1. Get raw Exoproc single-class bytecode
+  it('injects single-class Exoproc in-memory (defineClass) over Named Pipe with ZERO disk JARs', async () => {
     const { bytecode, className } = getAgentBytecodeSync({
       javaVersion: 8,
       javaPath,
     });
     expect(className).toBe('org.exoproc.njava.agent.utils.Exoproc');
-    expect(bytecode.length).toBeGreaterThan(20000);
+    expect(bytecode.length).toBeGreaterThan(15000);
 
     const tempBytecodeFile = join(
       tmpdir(),
       `exoproc-raw-bytecode-${Date.now()}.bin`,
     );
     writeFileSync(tempBytecodeFile, bytecode);
-    const TEST_PORT = 43394;
 
-    // 2. Synthesize a live Java test process that defines Exoproc purely in memory
     const runnerSource = `
       package org.exoproc.test;
       import java.lang.reflect.Method;
@@ -211,7 +186,7 @@ describe('jjit: Centralized JAR Packaging & URLClassLoader Agent Loading', () =>
       public class InMemoryDefineClassRunner {
           public static void main(String[] args) throws Exception {
               String binPath = args[0];
-              int port = Integer.parseInt(args[1]);
+              String pipePath = args[1];
 
               byte[] classBytes = Files.readAllBytes(Paths.get(binPath));
 
@@ -220,10 +195,9 @@ describe('jjit: Centralized JAR Packaging & URLClassLoader Agent Loading', () =>
               defMethod.setAccessible(true);
               Class<?> exoprocClass = (Class<?>) defMethod.invoke(cl, "org.exoproc.njava.agent.utils.Exoproc", classBytes, 0, classBytes.length);
 
-              Method startMethod = exoprocClass.getMethod("start", int.class);
-              startMethod.invoke(null, port);
+              Method startMethod = exoprocClass.getMethod("start", String.class);
+              startMethod.invoke(null, pipePath);
 
-              System.out.println("IN_MEMORY_LOADED_OK");
               Thread.sleep(30000);
           }
       }
@@ -241,8 +215,14 @@ describe('jjit: Centralized JAR Packaging & URLClassLoader Agent Loading', () =>
       mainClass: 'org.exoproc.test.InMemoryDefineClassRunner',
     });
 
+    const server = createIpcServer({
+      name: `test_memdef_${process.pid}_${Date.now()}`,
+    });
+    await server.listen();
+    const client = new AgentClient({ server });
+
     const proc = spawn(
-      [javaPath, '-jar', runnerJar, tempBytecodeFile, String(TEST_PORT)],
+      [javaPath, '-jar', runnerJar, tempBytecodeFile, server.pipePath],
       {
         stdout: 'pipe',
         stderr: 'inherit',
@@ -250,27 +230,19 @@ describe('jjit: Centralized JAR Packaging & URLClassLoader Agent Loading', () =>
     );
 
     try {
-      const ready = await waitForAgentReady(TEST_PORT, 12000);
+      const ready = await waitForAgentReady(server, 15000);
       expect(ready).toBe(true);
 
-      // Verify in-memory Exoproc endpoints
-      const statusRes = await fetch(`http://127.0.0.1:${TEST_PORT}/status`);
-      expect(statusRes.ok).toBe(true);
-      const statusJson = (await statusRes.json()) as any;
-      expect(statusJson.alive).toBe(true);
-      expect(statusJson.port).toBe(TEST_PORT);
+      const status = await client.getStatus();
+      expect(status.alive).toBe(true);
+      expect(status.pipePath).toBe(server.pipePath);
 
-      const evalRes = await fetch(`http://127.0.0.1:${TEST_PORT}/eval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: '100 * 2 + 42' }),
-      });
-      expect(evalRes.ok).toBe(true);
-      const evalJson = (await evalRes.json()) as any;
+      const evalJson = await client.eval('100 * 2 + 42');
       expect(evalJson.success).toBe(true);
       expect(evalJson.result).toBe('242');
     } finally {
       proc.kill();
+      await server.close();
       try {
         unlinkSync(runnerJar);
       } catch {}

@@ -1,6 +1,6 @@
 {
   "name": "exoproc-accessors",
-  "version": "0.6.7",
+  "version": "0.7.0",
   "description": "Advanced host and middleware accessors for bun-xffi — orchestrating HostAccessor family (redirector/bootstrap) plus concrete indirect-call, memset/memcmp, file-transfer, process-cache, machineCode-pool, and scanner middleware.",
   "main": "./dist/index.js",
   "exports": {

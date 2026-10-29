@@ -1,6 +1,6 @@
 {
   "name": "exoproc-utils",
-  "version": "0.6.7",
+  "version": "0.7.0",
   "description": "Simple file-based logger for the Exoproc ecosystem",
   "main": "./dist/index.js",
   "bin": {

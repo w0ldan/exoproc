@@ -6,7 +6,7 @@ description: 'Architectural comparison between zero-injection JNI reflection and
 Exoproc provides two distinct operational bridges to interact with target Java Virtual Machines:
 
 1. **`ReflectionBridge` (Pure JNI):** Zero-injection, completely stealthy, driven cross-process via `jvm.dll` VTable calls.
-2. **`AgentReflectionBridge` (In-Process Agent):** High-throughput, low-latency in-memory agent running an embedded HTTP/RPC server inside the JVM.
+2. **`AgentReflectionBridge` (In-Process Agent):** High-throughput, zero-port in-memory agent connecting outward to Bun over a Windows Named Pipe (`\\.\pipe\exoproc_*`).
 
 ```text
                         ┌─────────────────────────────────┐
@@ -19,7 +19,7 @@ Exoproc provides two distinct operational bridges to interact with target Java V
      │   ReflectionBridge    │                       │  AgentReflectionBridge│
      │      (Pure JNI)       │                       │   (In-Process Agent)  │
      └───────────┬───────────┘                       └───────────┬───────────┘
-                 │ Cross-Process Memory                          │ Loopback HTTP / Binary RPC
+                 │ Cross-Process Memory                          │ Named Pipe Binary RPC
                  ▼                                               ▼
      ┌───────────────────────┐                       ┌───────────────────────┐
      │  jvm.dll JNIEnv Table │                       │   Exoproc Agent       │

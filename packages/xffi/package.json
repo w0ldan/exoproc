@@ -1,6 +1,6 @@
 {
   "name": "bun-xffi",
-  "version": "0.6.6",
+  "version": "0.7.0",
   "description": "Win32-optimized Cross-Process FFI foundation for Bun.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

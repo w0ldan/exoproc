@@ -11,6 +11,9 @@
   "exclude": ["node_modules", "dist", "**/*.test.ts"],
   "references": [
     {
+      "path": "../../ipc"
+    },
+    {
       "path": "../jjit"
     },
     {

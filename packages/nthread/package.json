@@ -1,6 +1,6 @@
 {
   "name": "bun-nthread",
-  "version": "0.6.7",
+  "version": "0.7.0",
   "description": "Non-invasive x64 Windows thread redirection library for Bun — delegate execution to existing threads without machineCode, remote allocation, or CreateRemoteThread.",
   "main": "./dist/index.js",
   "exports": {

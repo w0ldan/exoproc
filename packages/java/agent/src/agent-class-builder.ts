@@ -12,35 +12,34 @@ export function generateBuildId(): string {
 
 export interface BuildExoprocOptions {
   buildId?: string;
-  port?: number;
+  pipePath?: string;
 }
 
 /**
  * Builds the consolidated Exoproc Java agent class using the fluent JavaClassBuilder DSL.
+ * Connects outward as a Named Pipe client (`\\.\pipe\exoproc_*`) with zero open TCP ports
+ * and zero inner classes so single-class in-memory `defineClass` injection works directly.
  */
 export function buildExoprocClass(
   options: BuildExoprocOptions = {},
 ): JavaClassBuilder {
   const buildId = options.buildId ?? generateBuildId();
-  const port = options.port ?? 43378;
+  const pipePath = options.pipePath ?? '\\\\.\\pipe\\exoproc';
   const cls = new JavaClassBuilder('Exoproc');
 
   cls
     .package('org.exoproc.njava.agent.utils')
     .public()
+    .extends('ClassLoader')
     .implements(
-      'com.sun.net.httpserver.HttpHandler',
       'java.lang.Runnable',
       'java.util.concurrent.Callable<Object>',
+      'java.util.concurrent.ThreadFactory',
     )
-    .import('com.sun.net.httpserver.HttpExchange')
-    .import('com.sun.net.httpserver.HttpHandler')
-    .import('com.sun.net.httpserver.HttpServer')
     .import('java.io.*')
     .import('java.lang.instrument.Instrumentation')
     .import('java.lang.management.ManagementFactory')
     .import('java.lang.reflect.*')
-    .import('java.net.*')
     .import('java.nio.charset.StandardCharsets')
     .import('java.util.*')
     .import('java.util.concurrent.*')
@@ -56,11 +55,11 @@ export function buildExoprocClass(
     .final()
     .initialValue(JSON.stringify(buildId))
 
-    .field('DEFAULT_PORT', 'int')
+    .field('DEFAULT_PIPE', 'String')
     .public()
     .static()
     .final()
-    .initialValue(String(port))
+    .initialValue(JSON.stringify(pipePath))
 
     .field('instance', 'Exoproc')
     .private()
@@ -68,11 +67,11 @@ export function buildExoprocClass(
     .volatile()
     .initialValue('null')
 
-    .field('httpServer', 'HttpServer')
+    .field('connected', 'boolean')
     .private()
     .static()
     .volatile()
-    .initialValue('null')
+    .initialValue('false')
 
     .field('targetLoader', 'ClassLoader')
     .private()
@@ -86,11 +85,65 @@ export function buildExoprocClass(
     .volatile()
     .initialValue('null')
 
-    .field('activePort', 'int')
+    .field('activePipe', 'String')
     .private()
     .static()
     .volatile()
-    .initialValue('DEFAULT_PORT')
+    .initialValue('DEFAULT_PIPE')
+
+    .field('activeClientId', 'String')
+    .private()
+    .static()
+    .volatile()
+    .initialValue('null')
+
+    .field('definedClasses', 'ConcurrentHashMap<String, Class<?>>')
+    .private()
+    .static()
+    .final()
+    .initialValue('new ConcurrentHashMap<String, Class<?>>()')
+
+    .field('shuttingDown', 'boolean')
+    .private()
+    .static()
+    .volatile()
+    .initialValue('false')
+
+    .field('s2cInput', 'InputStream')
+    .private()
+    .static()
+    .volatile()
+    .initialValue('null')
+
+    .field('c2sOutput', 'OutputStream')
+    .private()
+    .static()
+    .volatile()
+    .initialValue('null')
+
+    .field('s2cResource', 'Object')
+    .private()
+    .static()
+    .volatile()
+    .initialValue('null')
+
+    .field('c2sResource', 'Object')
+    .private()
+    .static()
+    .volatile()
+    .initialValue('null')
+
+    .field('txLock', 'Object')
+    .private()
+    .static()
+    .final()
+    .initialValue('new Object()')
+
+    .field('rpcExecutor', 'ExecutorService')
+    .private()
+    .static()
+    .volatile()
+    .initialValue('null')
 
     // Reflection & Object Registries
     .field('nextId', 'AtomicLong')
@@ -133,7 +186,7 @@ export function buildExoprocClass(
     .final()
     .initialValue('new ConcurrentHashMap<Long, Object>()')
 
-    // SAM Callback Queues & Invocations
+    // SAM Callback Pending Latches
     .field('nextInvocationId', 'AtomicLong')
     .private()
     .static()
@@ -146,19 +199,21 @@ export function buildExoprocClass(
     .final()
     .initialValue('new ConcurrentHashMap<Long, Map<String, Object>>()')
 
-    .field('invocationQueue', 'BlockingQueue<Map<String, Object>>')
-    .private()
-    .static()
-    .final()
-    .initialValue('new LinkedBlockingQueue<Map<String, Object>>()')
-
     .field('defaultTimeoutSeconds', 'long')
     .private()
     .static()
     .volatile()
     .initialValue('30')
 
-    // Fields for executor task execution (satisfies Runnable & Callable without inner classes)
+    // Multi-purpose task fields (zero inner classes)
+    .field('rpcReqId', 'int')
+    .private()
+    .initialValue('0')
+
+    .field('rpcPayload', 'byte[]')
+    .private()
+    .initialValue('null')
+
     .field('execMethod', 'Method')
     .private()
     .initialValue('null')
@@ -187,7 +242,20 @@ export function buildExoprocClass(
     // Constructors
     // =========================================================================
 
-    .constructorDef()
+    .constructorDef(
+      [],
+      'super(targetLoader != null ? targetLoader : Exoproc.class.getClassLoader());',
+    )
+
+    .constructorDef(
+      [
+        { name: 'reqId', type: 'int' },
+        { name: 'payload', type: 'byte[]' },
+      ],
+      `super(null);
+this.rpcReqId = reqId;
+this.rpcPayload = payload;`,
+    )
 
     .constructorDef(
       [
@@ -198,7 +266,8 @@ export function buildExoprocClass(
         { name: 'box', type: 'Object[]' },
         { name: 'err', type: 'Throwable[]' },
       ],
-      `this.execMethod = m;
+      `super(null);
+this.execMethod = m;
 this.execTarget = target;
 this.execArgs = args;
 this.execLatch = latch;
@@ -217,7 +286,7 @@ this.execErr = err;`,
       { name: 'agentArgs', type: 'String' },
       { name: 'inst', type: 'Instrumentation' },
     ])
-    .body('init(agentArgs, null, inst, DEFAULT_PORT);')
+    .body('init(agentArgs, null, inst, null);')
 
     .method('agentmain', 'void')
     .public()
@@ -226,29 +295,29 @@ this.execErr = err;`,
       { name: 'agentArgs', type: 'String' },
       { name: 'inst', type: 'Instrumentation' },
     ])
-    .body('init(agentArgs, null, inst, DEFAULT_PORT);')
+    .body('init(agentArgs, null, inst, null);')
 
     .method('start', 'void')
     .public()
     .static()
-    .body('start(DEFAULT_PORT);')
+    .body('start(null);')
 
     .method('start', 'void')
     .public()
     .static()
-    .params([{ name: 'port', type: 'int' }])
+    .params([{ name: 'pipePath', type: 'String' }])
     .body(
-      'init(null, Thread.currentThread().getContextClassLoader(), null, port);',
+      'init(null, Thread.currentThread().getContextClassLoader(), null, pipePath);',
     )
 
     .method('start', 'void')
     .public()
     .static()
     .params([
-      { name: 'port', type: 'int' },
+      { name: 'pipePath', type: 'String' },
       { name: 'classLoader', type: 'ClassLoader' },
     ])
-    .body('init(null, classLoader, null, port);')
+    .body('init(null, classLoader, null, pipePath);')
 
     .method('init', 'void')
     .public()
@@ -258,59 +327,84 @@ this.execErr = err;`,
       { name: 'agentArgs', type: 'String' },
       { name: 'classLoader', type: 'ClassLoader' },
       { name: 'inst', type: 'Instrumentation' },
-      { name: 'defaultPort', type: 'int' },
+      { name: 'explicitPipe', type: 'String' },
     ])
     .body(
-      `if (httpServer != null) {
-    System.out.println("[Exoproc] Already running on port " + activePort);
+      `if (connected && !shuttingDown) {
     return;
 }
 
-int port = defaultPort;
-String sysPort = System.getProperty("tc.njava.port");
-if (sysPort == null) sysPort = System.getenv("NJAVA_PORT");
-if (sysPort != null && !sysPort.trim().isEmpty()) {
-    try { port = Integer.parseInt(sysPort.trim()); } catch (Exception ignored) {}
-}
+String resolvedPipe = (explicitPipe != null && !explicitPipe.trim().isEmpty()) ? explicitPipe.trim() : null;
 
-if (agentArgs != null && !agentArgs.trim().isEmpty()) {
-    for (String part : agentArgs.split("[,;]")) {
-        String[] kv = part.split("=");
-        if (kv.length == 2 && "port".equalsIgnoreCase(kv[0].trim())) {
-            try { port = Integer.parseInt(kv[1].trim()); } catch (Exception ignored) {}
+if (resolvedPipe == null && agentArgs != null && !agentArgs.trim().isEmpty()) {
+    String trimmedArgs = agentArgs.trim();
+    if (!trimmedArgs.contains("=")) {
+        resolvedPipe = trimmedArgs;
+    } else {
+        for (String part : trimmedArgs.split("[,;]")) {
+            int eq = part.indexOf('=');
+            if (eq > 0) {
+                String k = part.substring(0, eq).trim();
+                String v = part.substring(eq + 1).trim();
+                if ("pipe".equalsIgnoreCase(k) && !v.isEmpty()) {
+                    resolvedPipe = v;
+                }
+            }
         }
     }
 }
 
-activePort = port;
-targetLoader = classLoader != null ? classLoader : Thread.currentThread().getContextClassLoader();
-instrumentation = inst;
-instance = new Exoproc();
+if (resolvedPipe == null) {
+    String sysPipe = System.getProperty("exoproc.pipe");
+    if (sysPipe == null || sysPipe.trim().isEmpty()) {
+        sysPipe = System.getenv("EXOPROC_PIPE");
+    }
+    if (sysPipe != null && !sysPipe.trim().isEmpty()) {
+        resolvedPipe = sysPipe.trim();
+    }
+}
 
-Thread agentThread = new Thread(instance, "Exoproc-Bootstrap");
-agentThread.setDaemon(true);
-agentThread.start();`,
+if (resolvedPipe == null) {
+    resolvedPipe = DEFAULT_PIPE;
+}
+
+shuttingDown = false;
+activePipe = resolvedPipe;
+activeClientId = "java_" + getPid() + "_" + BUILD_ID + "_" + (System.nanoTime() & 0xfffffL);
+targetLoader = classLoader != null ? classLoader : Thread.currentThread().getContextClassLoader();
+if (inst != null) instrumentation = inst;
+instance = new Exoproc();
+rpcExecutor = Executors.newCachedThreadPool(instance);
+
+Thread readerThread = new Thread(instance, "Exoproc-PipeReader");
+readerThread.setDaemon(true);
+readerThread.start();`,
+    )
+
+    .method('newThread', 'Thread')
+    .public()
+    .annotation('@Override')
+    .params([{ name: 'r', type: 'Runnable' }])
+    .body(
+      `Thread t = new Thread(r, "Exoproc-Worker");
+t.setDaemon(true);
+return t;`,
     )
 
     .method('isRunning', 'boolean')
     .public()
     .static()
-    .body('return httpServer != null;')
+    .body('return connected && !shuttingDown;')
 
-    .method('getPort', 'int')
+    .method('getPipePath', 'String')
     .public()
     .static()
-    .body('return activePort;')
+    .body('return activePipe;')
 
     .method('getInstance', 'Exoproc')
     .public()
     .static()
     .body('return instance;')
-
-    .method('getHttpServer', 'HttpServer')
-    .public()
-    .static()
-    .body('return httpServer;')
 
     .method('getBuildId', 'String')
     .public()
@@ -318,7 +412,7 @@ agentThread.start();`,
     .body('return BUILD_ID;')
 
     // =========================================================================
-    // Runnable & Callable implementation (Server bootstrap + Executor tasks)
+    // Runnable & Callable Implementation (Executor task, RPC worker, Pipe reader)
     // =========================================================================
 
     .method('run', 'void')
@@ -340,19 +434,67 @@ agentThread.start();`,
     return;
 }
 
+if (rpcPayload != null) {
+    Exoproc targetInst = instance != null ? instance : this;
+    targetInst.processRpcFrame(rpcReqId, rpcPayload);
+    return;
+}
+
 try {
-    System.out.println("[Exoproc] Initializing reflection RPC runtime on port " + activePort + "...");
+    Object[] s2c = openChannel(activePipe, 10000L);
+    InputStream in1 = (InputStream) s2c[0];
+    OutputStream out1 = (OutputStream) s2c[1];
+    s2cResource = s2c[2];
+    handshakeChannel(in1, out1, "s2c", 1);
 
-    HttpServer server = HttpServer.create(new InetSocketAddress(activePort), 0);
-    server.setExecutor(Executors.newCachedThreadPool());
-    server.createContext("/", this);
-    server.start();
+    Object[] c2s = openChannel(activePipe, 10000L);
+    InputStream in2 = (InputStream) c2s[0];
+    OutputStream out2 = (OutputStream) c2s[1];
+    c2sResource = c2s[2];
+    handshakeChannel(in2, out2, "c2s", 2);
 
-    httpServer = server;
-    System.out.println("[Exoproc] Successfully initialized on port " + activePort);
-} catch (Exception e) {
-    System.err.println("[Exoproc] Failed to start agent HTTP server: " + e.getMessage());
-    e.printStackTrace();
+    s2cInput = in1;
+    c2sOutput = out2;
+    connected = true;
+
+    byte[] hdr = new byte[9];
+    while (!shuttingDown) {
+        if (!readFully(in1, hdr, 9)) {
+            break;
+        }
+        int len = (hdr[0] & 0xff) | ((hdr[1] & 0xff) << 8) | ((hdr[2] & 0xff) << 16) | ((hdr[3] & 0xff) << 24);
+        int type = hdr[4] & 0xff;
+        int reqId = (hdr[5] & 0xff) | ((hdr[6] & 0xff) << 8) | ((hdr[7] & 0xff) << 16) | ((hdr[8] & 0xff) << 24);
+        byte[] body = len > 0 ? new byte[len] : new byte[0];
+        if (len > 0 && !readFully(in1, body, len)) {
+            break;
+        }
+
+        if (type == 0xfe) {
+            sendFrame(0xff, reqId, body);
+        } else if (type == 0x21) {
+            handleCallbackResponseFrame(body);
+        } else if (type == 0x10) {
+            ExecutorService pool = rpcExecutor;
+            if (pool != null && !pool.isShutdown()) {
+                pool.submit((Runnable) new Exoproc(reqId, body));
+            } else {
+                processRpcFrame(reqId, body);
+            }
+        }
+    }
+} catch (Throwable t) {
+    if (!shuttingDown) {
+        System.err.println("[Exoproc] Pipe agent stopped: " + t.getMessage());
+    }
+} finally {
+    connected = false;
+    closeResource(s2cResource);
+    closeResource(c2sResource);
+    s2cResource = null;
+    c2sResource = null;
+    s2cInput = null;
+    c2sOutput = null;
 }`,
     )
 
@@ -369,123 +511,261 @@ return execBox != null ? execBox[0] : null;`,
     )
 
     // =========================================================================
-    // Central HTTP Request Handler (All routes in one place, zero inner classes)
+    // Central RPC Frame Dispatcher
     // =========================================================================
 
-    .method('handle', 'void')
+    .method('processRpcFrame', 'void')
     .public()
-    .annotation('@Override')
-    .throws('IOException')
-    .params([{ name: 'exchange', type: 'HttpExchange' }])
+    .params([
+      { name: 'reqId', type: 'int' },
+      { name: 'payloadBytes', type: 'byte[]' },
+    ])
     .body(
-      `String path = exchange.getRequestURI().getPath();
-String method = exchange.getRequestMethod();
+      `Map<String, Object> res;
+boolean triggerShutdown = false;
+try {
+    String jsonText = new String(payloadBytes, StandardCharsets.UTF_8).trim();
+    Object parsed = parseJson(jsonText);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> req = (parsed instanceof Map) ? (Map<String, Object>) parsed : new LinkedHashMap<String, Object>();
+    String action = req.get("action") != null ? String.valueOf(req.get("action")) : "";
 
-if ("/status".equals(path)) {
-    long uptime = ManagementFactory.getRuntimeMXBean().getUptime();
-    sendJsonResponse(exchange, 200, "{\\"alive\\":true,\\"buildId\\":\\"" + BUILD_ID + "\\",\\"port\\":" + activePort + ",\\"uptime\\":" + uptime + "}");
-    return;
-}
-
-if ("/buildId".equals(path) || "/build".equals(path)) {
-    sendJsonResponse(exchange, 200, "{\\"buildId\\":\\"" + BUILD_ID + "\\"}");
-    return;
-}
-
-if (!"POST".equalsIgnoreCase(method)) {
-    sendJsonResponse(exchange, 405, "{\\"error\\":\\"Method Not Allowed\\"}");
-    return;
-}
-
-String body = readRequestBody(exchange).trim();
-Object parsed = parseJson(body);
-@SuppressWarnings("unchecked")
-Map<String, Object> req = (parsed instanceof Map) ? (Map<String, Object>) parsed : new HashMap<String, Object>();
-
-if ("/reflection/class".equals(path)) {
-    String className = (String) req.get("name");
-    if (className == null && !body.startsWith("{")) className = body;
-    if (className == null) {
-        sendJsonResponse(exchange, 400, "{\\"success\\":false,\\"error\\":\\"Missing 'name' parameter\\"}");
-        return;
+    if (action.startsWith("/")) {
+        action = action.substring(1);
     }
-    Map<String, Object> res = inspectClass(className);
-    sendJsonResponse(exchange, 200, stringifyJson(res));
-    return;
+
+    if ("status".equals(action)) {
+        res = new LinkedHashMap<String, Object>();
+        res.put("success", true);
+        res.put("alive", true);
+        res.put("buildId", BUILD_ID);
+        res.put("pipePath", activePipe);
+        res.put("pid", getPid());
+        res.put("targetName", getTargetName());
+        res.put("uptime", ManagementFactory.getRuntimeMXBean().getUptime());
+    } else if ("buildId".equals(action) || "build".equals(action)) {
+        res = new LinkedHashMap<String, Object>();
+        res.put("success", true);
+        res.put("buildId", BUILD_ID);
+    } else if ("classes".equals(action)) {
+        res = listLoadedClasses();
+    } else if ("eval".equals(action)) {
+        res = evaluateSnippet(req);
+    } else if ("reflection/class".equals(action)) {
+        String className = req.get("name") != null ? String.valueOf(req.get("name")) : null;
+        if (className == null) {
+            res = new LinkedHashMap<String, Object>();
+            res.put("success", false);
+            res.put("error", "Missing 'name' parameter");
+        } else {
+            res = inspectClass(className);
+        }
+    } else if ("reflection/invoke".equals(action)) {
+        res = invokeMethod(req);
+    } else if ("reflection/field/get".equals(action)) {
+        res = getField(req);
+    } else if ("reflection/field/set".equals(action)) {
+        res = setField(req);
+    } else if ("reflection/construct".equals(action)) {
+        res = constructInstance(req);
+    } else if ("reflection/object/class".equals(action)) {
+        long handle = req.get("handle") != null ? ((Number) req.get("handle")).longValue() : 0L;
+        res = getObjectClass(handle);
+    } else if ("reflection/object/string".equals(action)) {
+        long handle = req.get("handle") != null ? ((Number) req.get("handle")).longValue() : 0L;
+        res = getObjectString(handle);
+    } else if ("reflection/release".equals(action)) {
+        List<?> handles = (req.get("handles") instanceof List) ? (List<?>) req.get("handles") : Collections.emptyList();
+        res = releaseHandles(handles);
+    } else if ("reflection/defineClass".equals(action)) {
+        res = handleDefineClass(req);
+    } else if ("shutdown".equals(action)) {
+        res = new LinkedHashMap<String, Object>();
+        res.put("success", true);
+        triggerShutdown = true;
+    } else {
+        res = new LinkedHashMap<String, Object>();
+        res.put("success", false);
+        res.put("error", "Unknown RPC action: " + action);
+    }
+} catch (Throwable t) {
+    res = new LinkedHashMap<String, Object>();
+    res.put("success", false);
+    res.put("error", t.getMessage() != null ? t.getMessage() : t.toString());
 }
 
-if ("/reflection/invoke".equals(path)) {
-    Map<String, Object> res = invokeMethod(req);
-    sendJsonResponse(exchange, 200, stringifyJson(res));
-    return;
-}
+try {
+    byte[] outBytes = stringifyJson(res).getBytes(StandardCharsets.UTF_8);
+    sendFrame(0x11, reqId, outBytes);
+} catch (IOException ignored) {}
 
-if ("/reflection/field/get".equals(path)) {
-    Map<String, Object> res = getField(req);
-    sendJsonResponse(exchange, 200, stringifyJson(res));
-    return;
-}
+if (triggerShutdown) {
+    shutdown();
+}`,
+    )
 
-if ("/reflection/field/set".equals(path)) {
-    Map<String, Object> res = setField(req);
-    sendJsonResponse(exchange, 200, stringifyJson(res));
-    return;
+    .method('listLoadedClasses', 'Map<String, Object>')
+    .public()
+    .body(
+      `Map<String, Object> res = new LinkedHashMap<String, Object>();
+List<String> names = new ArrayList<String>();
+if (instrumentation != null) {
+    for (Class<?> c : instrumentation.getAllLoadedClasses()) {
+        if (c != null && c.getName() != null) names.add(c.getName());
+    }
+} else {
+    names.addAll(classNameToId.keySet());
 }
+res.put("success", true);
+res.put("classes", names);
+return res;`,
+    )
 
-if ("/reflection/construct".equals(path)) {
-    Map<String, Object> res = constructInstance(req);
-    sendJsonResponse(exchange, 200, stringifyJson(res));
-    return;
-}
+    .method('evaluateSnippet', 'Map<String, Object>')
+    .public()
+    .params([{ name: 'req', type: 'Map<String, Object>' }])
+    .body(
+      `Map<String, Object> res = new LinkedHashMap<String, Object>();
+String code = req.get("code") != null ? String.valueOf(req.get("code")) : "";
+res.put("logs", Collections.emptyList());
+try {
+    Class<?> semCls = Class.forName("javax.script.ScriptEngineManager");
+    Object manager = semCls.getDeclaredConstructor().newInstance();
+    Method getByName = semCls.getMethod("getEngineByName", String.class);
+    Object engine = getByName.invoke(manager, "nashorn");
+    if (engine == null) engine = getByName.invoke(manager, "JavaScript");
+    if (engine == null) engine = getByName.invoke(manager, "js");
+    if (engine != null) {
+        Class<?> seCls = Class.forName("javax.script.ScriptEngine");
+        if (req.get("globals") instanceof Map) {
+            Method putMethod = seCls.getMethod("put", String.class, Object.class);
+            Map<?, ?> globals = (Map<?, ?>) req.get("globals");
+            for (Map.Entry<?, ?> entry : globals.entrySet()) {
+                putMethod.invoke(engine, String.valueOf(entry.getKey()), entry.getValue());
+            }
+        }
+        Method evalMethod = seCls.getMethod("eval", String.class);
+        Object val = evalMethod.invoke(engine, code);
+        res.put("success", true);
+        res.put("result", val != null ? String.valueOf(val) : null);
+        return res;
+    }
+} catch (InvocationTargetException ite) {
+    Throwable cause = ite.getCause() != null ? ite.getCause() : ite;
+    res.put("success", false);
+    res.put("error", cause.getMessage() != null ? cause.getMessage() : cause.toString());
+    return res;
+} catch (Throwable ignored) {}
 
-if ("/reflection/object/class".equals(path)) {
-    long handle = req.get("handle") != null ? ((Number) req.get("handle")).longValue() : 0L;
-    Map<String, Object> res = getObjectClass(handle);
-    sendJsonResponse(exchange, 200, stringifyJson(res));
-    return;
-}
-
-if ("/reflection/object/string".equals(path)) {
-    long handle = req.get("handle") != null ? ((Number) req.get("handle")).longValue() : 0L;
-    Map<String, Object> res = getObjectString(handle);
-    sendJsonResponse(exchange, 200, stringifyJson(res));
-    return;
-}
-
-if ("/reflection/release".equals(path)) {
-    List<?> handles = (List<?>) req.get("handles");
-    Map<String, Object> res = releaseHandles(handles);
-    sendJsonResponse(exchange, 200, stringifyJson(res));
-    return;
-}
-
-if ("/callback/poll".equals(path)) {
-    long timeoutMs = req.get("timeoutMs") != null ? ((Number) req.get("timeoutMs")).longValue() : 1000L;
-    Map<String, Object> evt = null;
-    try { evt = invocationQueue.poll(timeoutMs, TimeUnit.MILLISECONDS); } catch (Exception ignored) {}
-    Map<String, Object> res = new LinkedHashMap<String, Object>();
-    res.put("success", true);
-    res.put("event", evt);
-    sendJsonResponse(exchange, 200, stringifyJson(res));
-    return;
-}
-
-if ("/callback/reply".equals(path)) {
-    long eventId = req.get("eventId") != null ? ((Number) req.get("eventId")).longValue() : 0L;
-    Object val = req.get("value");
-    completeCallback(eventId, val, null);
-    sendJsonResponse(exchange, 200, "{\\"success\\":true}");
-    return;
-}
-
-sendJsonResponse(exchange, 404, "{\\"error\\":\\"Not Found\\",\\"path\\":\\"" + path + "\\"}");`,
+try {
+    Class<?> jshellCls = Class.forName("jdk.jshell.JShell");
+    Object shell = jshellCls.getMethod("create").invoke(null);
+    try {
+        List<?> events = (List<?>) jshellCls.getMethod("eval", String.class).invoke(shell, code);
+        String lastVal = null;
+        if (events != null && !events.isEmpty()) {
+            Object evt = events.get(events.size() - 1);
+            Object valObj = evt.getClass().getMethod("value").invoke(evt);
+            if (valObj != null) {
+                lastVal = String.valueOf(valObj);
+                if (lastVal.length() >= 2 && lastVal.startsWith("\\"") && lastVal.endsWith("\\"")) {
+                    lastVal = lastVal.substring(1, lastVal.length() - 1);
+                }
+            }
+        }
+        res.put("success", true);
+        res.put("result", lastVal);
+        return res;
+    } finally {
+        try { jshellCls.getMethod("close").invoke(shell); } catch (Throwable ignored) {}
+    }
+} catch (Throwable t) {
+    res.put("success", false);
+    res.put("error", "No script evaluation engine available: " + (t.getMessage() != null ? t.getMessage() : t.toString()));
+    return res;
+}`,
     )
 
     // =========================================================================
     // Reflection Inspection & Remote Invocation
     // =========================================================================
 
-    .method('resolveClass', 'Class<?>')
+    .method('defineOwnedClass', 'Class<?>')
+    .public()
+    .synchronized()
+    .params([
+      { name: 'name', type: 'String' },
+      { name: 'bytes', type: 'byte[]' },
+    ])
+    .body(
+      `if (name != null) {
+    Class<?> existing = definedClasses.get(name);
+    if (existing != null) return existing;
+}
+Class<?> cls = super.defineClass(name, bytes, 0, bytes.length);
+definedClasses.put(cls.getName(), cls);
+if (name != null) definedClasses.put(name, cls);
+return cls;`,
+    )
+
+    .method('defineClassBytes', 'Class<?>')
+    .public()
+    .static()
+    .params([
+      { name: 'name', type: 'String' },
+      { name: 'bytes', type: 'byte[]' },
+    ])
+    .body(
+      `Exoproc loader = instance != null ? instance : new Exoproc();
+return loader.defineOwnedClass(name, bytes);`,
+    )
+
+    .method('defineClass', 'Class<?>')
+    .public()
+    .static()
+    .params([
+      { name: 'name', type: 'String' },
+      { name: 'byteList', type: 'List<?>' },
+    ])
+    .body(
+      `byte[] bytes = new byte[byteList != null ? byteList.size() : 0];
+if (byteList != null) {
+    for (int i = 0; i < byteList.size(); i++) {
+        Object item = byteList.get(i);
+        bytes[i] = item instanceof Number ? ((Number) item).byteValue() : 0;
+    }
+}
+return defineClassBytes(name, bytes);`,
+    )
+
+    .method('handleDefineClass', 'Map<String, Object>')
+    .public()
+    .params([{ name: 'req', type: 'Map<String, Object>' }])
+    .body(
+      `Map<String, Object> res = new LinkedHashMap<String, Object>();
+try {
+    String name = req.get("name") != null ? String.valueOf(req.get("name")) : null;
+    String b64 = req.get("bytecode") != null ? String.valueOf(req.get("bytecode")) : null;
+    if (b64 == null || b64.isEmpty()) {
+        res.put("success", false);
+        res.put("error", "Missing 'bytecode' base64 parameter");
+        return res;
+    }
+    byte[] bytes = Base64.getDecoder().decode(b64);
+    Class<?> cls = defineClassBytes(name, bytes);
+    long classId = getOrCreateClassId(cls);
+    res.put("success", true);
+    res.put("classId", classId);
+    res.put("name", cls.getName());
+    return res;
+} catch (Throwable t) {
+    res.put("success", false);
+    res.put("error", t.getMessage() != null ? t.getMessage() : t.toString());
+    return res;
+}`,
+    )
+
+    .method('findTargetClass', 'Class<?>')
     .public()
     .throws('ClassNotFoundException')
     .params([{ name: 'name', type: 'String' }])
@@ -503,6 +783,8 @@ if ("void".equals(name)) return void.class;
 if ("Exoproc".equals(name) || "org.exoproc.njava.agent.utils.Exoproc".equals(name) || "org.exoproc.njava.agent.NJavaAgent".equals(name)) {
     return Exoproc.class;
 }
+Class<?> dyn = definedClasses.get(name);
+if (dyn != null) return dyn;
 
 try {
     return Class.forName(name, false, targetLoader != null ? targetLoader : Exoproc.class.getClassLoader());
@@ -534,7 +816,7 @@ return id;`,
     .body(
       `Map<String, Object> res = new LinkedHashMap<String, Object>();
 try {
-    Class<?> cls = resolveClass(className);
+    Class<?> cls = findTargetClass(className);
     long classId = getOrCreateClassId(cls);
 
     res.put("success", true);
@@ -545,6 +827,13 @@ try {
     res.put("isArray", cls.isArray());
     res.put("isPrimitive", cls.isPrimitive());
     res.put("superclass", cls.getSuperclass() != null ? cls.getSuperclass().getName() : null);
+    List<String> scChain = new ArrayList<String>();
+    Class<?> scCur = cls.getSuperclass();
+    while (scCur != null) {
+        scChain.add(scCur.getName());
+        scCur = scCur.getSuperclass();
+    }
+    res.put("superclassChain", scChain);
 
     List<Map<String, Object>> methodsList = new ArrayList<Map<String, Object>>();
     Set<String> seenSigs = new HashSet<String>();
@@ -1056,10 +1345,16 @@ if (targetType == String.class) return raw.toString();
 
 if (targetType == byte[].class && raw instanceof String) {
     try {
-        return (byte[]) Class.forName("javax.xml.bind.DatatypeConverter")
-            .getMethod("parseBase64Binary", String.class)
-            .invoke(null, raw.toString());
-    } catch (Exception ignored) {}
+        Class<?> b64Cls = Class.forName("java.util.Base64");
+        Object decoder = b64Cls.getMethod("getDecoder").invoke(null);
+        return decoder.getClass().getMethod("decode", String.class).invoke(decoder, raw.toString());
+    } catch (Throwable ignored) {
+        try {
+            return (byte[]) Class.forName("javax.xml.bind.DatatypeConverter")
+                .getMethod("parseBase64Binary", String.class)
+                .invoke(null, raw.toString());
+        } catch (Throwable ignored2) {}
+    }
 }
 
 if (targetType.isInstance(raw)) return raw;
@@ -1127,8 +1422,205 @@ return box[0];`,
     )
 
     // =========================================================================
-    // Universal SAM Callback Dispatcher (Zero-IPC bridge & dynamic SAM hooks)
+    // Universal SAM Callback Dispatcher over Named Pipe
     // =========================================================================
+
+    .method('handleCallbackResponseFrame', 'void')
+    .private()
+    .static()
+    .params([{ name: 'body', type: 'byte[]' }])
+    .body(
+      `try {
+    Object parsed = parseJson(new String(body, StandardCharsets.UTF_8));
+    if (!(parsed instanceof Map)) return;
+    Map<?, ?> map = (Map<?, ?>) parsed;
+    long id = map.get("id") instanceof Number ? ((Number) map.get("id")).longValue() : 0L;
+    boolean ok = !Boolean.FALSE.equals(map.get("success"));
+    Object result = map.get("result");
+    Throwable err = ok ? null : new RuntimeException(map.get("error") != null ? String.valueOf(map.get("error")) : "Callback failed");
+    completeCallback(id, result, err);
+} catch (Throwable ignored) {}`,
+    )
+
+    // =========================================================================
+    // Pipe Transport & Binary Frame Protocol (9-byte Little-Endian Header)
+    // =========================================================================
+
+    .method('closeResource', 'void')
+    .private()
+    .static()
+    .params([{ name: 'res', type: 'Object' }])
+    .body(
+      `if (res == null) return;
+try {
+    if (res instanceof Closeable) {
+        ((Closeable) res).close();
+    } else if (res instanceof Process) {
+        ((Process) res).destroy();
+    }
+} catch (Throwable ignored) {}`,
+    )
+
+    .method('openChannel', 'Object[]')
+    .private()
+    .static()
+    .throws('Exception')
+    .params([
+      { name: 'path', type: 'String' },
+      { name: 'timeoutMs', type: 'long' },
+    ])
+    .body(
+      `long deadline = System.currentTimeMillis() + timeoutMs;
+if (path.startsWith("\\\\\\\\.\\\\pipe\\\\")) {
+    RandomAccessFile raf = null;
+    while (true) {
+        try {
+            raf = new RandomAccessFile(path, "rw");
+            break;
+        } catch (IOException e) {
+            if (System.currentTimeMillis() >= deadline) throw e;
+            try {
+                Thread.sleep(15);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Interrupted waiting for pipe: " + path, ie);
+            }
+        }
+    }
+    InputStream in = new FileInputStream(raf.getFD());
+    OutputStream out = new FileOutputStream(raf.getFD());
+    return new Object[]{ in, out, raf };
+}
+
+while (true) {
+    try {
+        try {
+            Class<?> udsCls = Class.forName("java.net.UnixDomainSocketAddress");
+            Method ofMethod = udsCls.getMethod("of", String.class);
+            Object addr = ofMethod.invoke(null, path);
+            Class<?> scCls = Class.forName("java.nio.channels.SocketChannel");
+            Method openMethod = scCls.getMethod("open", java.net.SocketAddress.class);
+            Object channel = openMethod.invoke(null, addr);
+            Class<?> chCls = Class.forName("java.nio.channels.Channels");
+            Class<?> rbcCls = Class.forName("java.nio.channels.ReadableByteChannel");
+            Class<?> wbcCls = Class.forName("java.nio.channels.WritableByteChannel");
+            InputStream in = (InputStream) chCls.getMethod("newInputStream", rbcCls).invoke(null, channel);
+            OutputStream out = (OutputStream) chCls.getMethod("newOutputStream", wbcCls).invoke(null, channel);
+            return new Object[]{ in, out, channel };
+        } catch (ClassNotFoundException cnfe) {
+            Process proc = new ProcessBuilder("socat", "-", "UNIX-CONNECT:" + path).start();
+            return new Object[]{ proc.getInputStream(), proc.getOutputStream(), proc };
+        }
+    } catch (Exception e) {
+        if (System.currentTimeMillis() >= deadline) throw e;
+        try {
+            Thread.sleep(20);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw e;
+        }
+    }
+}`,
+    )
+
+    .method('readFully', 'boolean')
+    .private()
+    .static()
+    .throws('IOException')
+    .params([
+      { name: 'in', type: 'InputStream' },
+      { name: 'buf', type: 'byte[]' },
+      { name: 'len', type: 'int' },
+    ])
+    .body(
+      `int off = 0;
+while (off < len) {
+    int n = in.read(buf, off, len - off);
+    if (n < 0) return false;
+    off += n;
+}
+return true;`,
+    )
+
+    .method('writeFrameRaw', 'void')
+    .private()
+    .static()
+    .throws('IOException')
+    .params([
+      { name: 'out', type: 'OutputStream' },
+      { name: 'type', type: 'int' },
+      { name: 'reqId', type: 'int' },
+      { name: 'payload', type: 'byte[]' },
+    ])
+    .body(
+      `int len = payload != null ? payload.length : 0;
+byte[] hdr = new byte[9];
+hdr[0] = (byte) (len & 0xff);
+hdr[1] = (byte) ((len >>> 8) & 0xff);
+hdr[2] = (byte) ((len >>> 16) & 0xff);
+hdr[3] = (byte) ((len >>> 24) & 0xff);
+hdr[4] = (byte) (type & 0xff);
+hdr[5] = (byte) (reqId & 0xff);
+hdr[6] = (byte) ((reqId >>> 8) & 0xff);
+hdr[7] = (byte) ((reqId >>> 16) & 0xff);
+hdr[8] = (byte) ((reqId >>> 24) & 0xff);
+out.write(hdr);
+if (len > 0) {
+    out.write(payload);
+}
+out.flush();`,
+    )
+
+    .method('sendFrame', 'void')
+    .private()
+    .static()
+    .throws('IOException')
+    .params([
+      { name: 'type', type: 'int' },
+      { name: 'reqId', type: 'int' },
+      { name: 'payload', type: 'byte[]' },
+    ])
+    .body(
+      `synchronized (txLock) {
+    OutputStream out = c2sOutput;
+    if (out == null) throw new IOException("Exoproc pipe output channel is not connected");
+    writeFrameRaw(out, type, reqId, payload);
+}`,
+    )
+
+    .method('handshakeChannel', 'void')
+    .private()
+    .static()
+    .throws('IOException')
+    .params([
+      { name: 'in', type: 'InputStream' },
+      { name: 'out', type: 'OutputStream' },
+      { name: 'role', type: 'String' },
+      { name: 'reqId', type: 'int' },
+    ])
+    .body(
+      `Map<String, Object> hello = new LinkedHashMap<String, Object>();
+hello.put("clientId", activeClientId);
+hello.put("role", role);
+hello.put("kind", "java-agent");
+hello.put("pid", getPid());
+hello.put("buildId", BUILD_ID);
+hello.put("targetName", getTargetName());
+byte[] helloBytes = stringifyJson(hello).getBytes(StandardCharsets.UTF_8);
+writeFrameRaw(out, 0x01, reqId, helloBytes);
+
+byte[] hdr = new byte[9];
+if (!readFully(in, hdr, 9)) {
+    throw new EOFException("EOF waiting for HELLO_ACK on role " + role);
+}
+int ackLen = (hdr[0] & 0xff) | ((hdr[1] & 0xff) << 8) | ((hdr[2] & 0xff) << 16) | ((hdr[3] & 0xff) << 24);
+if (ackLen > 0) {
+    byte[] ackBody = new byte[ackLen];
+    if (!readFully(in, ackBody, ackLen)) {
+        throw new EOFException("EOF reading HELLO_ACK body on role " + role);
+    }
+}`,
+    )
 
     .method('dispatchCallback', 'Object')
     .public()
@@ -1146,15 +1638,42 @@ Throwable[] errorBox = new Throwable[1];
 
 Map<String, Object> inv = new LinkedHashMap<String, Object>();
 inv.put("id", id);
-inv.put("callbackId", callbackId);
-inv.put("method", methodName);
-inv.put("args", args != null ? Arrays.asList(args) : Collections.emptyList());
 inv.put("latch", latch);
 inv.put("resultBox", resultBox);
 inv.put("errorBox", errorBox);
-
 pendingInvocations.put(id, inv);
-invocationQueue.offer(inv);
+
+List<Object> wireArgs = new ArrayList<Object>();
+if (args != null) {
+    Exoproc inst = instance;
+    for (Object a : args) {
+        if (a == null || a instanceof Boolean || a instanceof Number || a instanceof String || a instanceof Character) {
+            wireArgs.add(a);
+        } else if (inst != null) {
+            long h = inst.nextHandle.getAndIncrement();
+            inst.objectRegistry.put(h, a);
+            Map<String, Object> ref = new LinkedHashMap<String, Object>();
+            ref.put("handle", h);
+            wireArgs.add(ref);
+        } else {
+            wireArgs.add(String.valueOf(a));
+        }
+    }
+}
+
+Map<String, Object> packet = new LinkedHashMap<String, Object>();
+packet.put("id", id);
+packet.put("callbackId", callbackId);
+packet.put("method", methodName);
+packet.put("args", wireArgs);
+
+try {
+    byte[] payload = stringifyJson(packet).getBytes(StandardCharsets.UTF_8);
+    sendFrame(0x20, (int) id, payload);
+} catch (IOException ioe) {
+    pendingInvocations.remove(id);
+    throw new RuntimeException("Failed to send callback over pipe: " + ioe.getMessage(), ioe);
+}
 
 try {
     boolean completed = latch.await(defaultTimeoutSeconds, TimeUnit.SECONDS);
@@ -1284,7 +1803,7 @@ try {
         );
         return (Class<?>) def.invoke(unsafe, name, bytecode, 0, bytecode.length, cl, null);
     } catch (Throwable t2) {
-        throw new RuntimeException("Failed to defineClass " + name + ": " + t.getMessage(), t);
+        return defineClassBytes(name, bytecode);
     }
 }`,
     )
@@ -1315,10 +1834,18 @@ try {
     .public()
     .static()
     .body(
-      `System.out.println("[Exoproc] Shutdown requested.");
-if (httpServer != null) {
-    try { httpServer.stop(0); } catch (Exception ignored) {}
-    httpServer = null;
+      `shuttingDown = true;
+connected = false;
+closeResource(s2cResource);
+closeResource(c2sResource);
+s2cResource = null;
+c2sResource = null;
+s2cInput = null;
+c2sOutput = null;
+ExecutorService pool = rpcExecutor;
+rpcExecutor = null;
+if (pool != null) {
+    try { pool.shutdownNow(); } catch (Throwable ignored) {}
 }`,
     )
 
@@ -1336,13 +1863,27 @@ if (httpServer != null) {
     .static()
     .params([{ name: 'args', type: 'String[]' }])
     .body(
-      `int port = DEFAULT_PORT;
-if (args != null && args.length > 0) {
-    try { port = Integer.parseInt(args[0].trim()); } catch (Exception ignored) {}
+      `String pipe = null;
+if (args != null) {
+    for (int i = 0; i < args.length; i++) {
+        String a = args[i] != null ? args[i].trim() : "";
+        if ("--pipe".equals(a) && i + 1 < args.length) {
+            pipe = args[++i].trim();
+        } else if (a.startsWith("--pipe=")) {
+            pipe = a.substring(7).trim();
+        } else if (!a.startsWith("-") && pipe == null && !a.isEmpty()) {
+            pipe = a;
+        }
+    }
 }
-init(null, Exoproc.class.getClassLoader(), null, port);
-System.out.println("[Exoproc] Agent server running on port " + port);
-try { Thread.sleep(Long.MAX_VALUE); } catch (InterruptedException ignored) {}`,
+init(null, Exoproc.class.getClassLoader(), null, pipe);
+while (!shuttingDown) {
+    try {
+        Thread.sleep(250);
+    } catch (InterruptedException ignored) {
+        break;
+    }
+}`,
     )
 
     // =========================================================================
@@ -1601,45 +2142,7 @@ for (int i = 0; i < s.length(); i++) {
     else sb.append(c);
 }
 return sb.toString();`,
-    )
-
-    // =========================================================================
-    // HTTP Request & Response Utilities
-    // =========================================================================
-
-    .method('readRequestBody', 'String')
-    .public()
-    .static()
-    .throws('IOException')
-    .params([{ name: 'exchange', type: 'HttpExchange' }])
-    .body(
-      `InputStream is = exchange.getRequestBody();
-ByteArrayOutputStream baos = new ByteArrayOutputStream();
-byte[] buf = new byte[4096];
-int n;
-while ((n = is.read(buf)) != -1) {
-    baos.write(buf, 0, n);
-}
-return new String(baos.toByteArray(), StandardCharsets.UTF_8);`,
-    )
-
-    .method('sendJsonResponse', 'void')
-    .public()
-    .static()
-    .throws('IOException')
-    .params([
-      { name: 'exchange', type: 'HttpExchange' },
-      { name: 'statusCode', type: 'int' },
-      { name: 'jsonResponse', type: 'String' },
-    ]).body(`byte[] bytes = jsonResponse.getBytes(StandardCharsets.UTF_8);
-exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
-exchange.sendResponseHeaders(statusCode, bytes.length);
-OutputStream os = exchange.getResponseBody();
-os.write(bytes);
-os.close();`);
+    );
 
   return cls;
 }
@@ -1689,17 +2192,17 @@ export function buildNJavaAgentClass(): JavaClassBuilder {
     .method('start', 'void')
     .public()
     .static()
-    .params([{ name: 'port', type: 'int' }])
-    .body('Exoproc.start(port);')
+    .params([{ name: 'pipePath', type: 'String' }])
+    .body('Exoproc.start(pipePath);')
 
     .method('start', 'void')
     .public()
     .static()
     .params([
-      { name: 'port', type: 'int' },
+      { name: 'pipePath', type: 'String' },
       { name: 'classLoader', type: 'ClassLoader' },
     ])
-    .body('Exoproc.start(port, classLoader);')
+    .body('Exoproc.start(pipePath, classLoader);')
 
     .method('stop', 'void')
     .public()

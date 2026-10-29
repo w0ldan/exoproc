@@ -1,5 +1,7 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import { realpathSync } from 'node:fs';
 import readline from 'node:readline';
+import { pathToFileURL } from 'node:url';
 import {
   intro,
   outro,
@@ -18,9 +20,10 @@ import {
   SUPPORTED_CLIENTS,
 } from './setup/index.js';
 import { runDoctor } from './doctor/index.js';
+import { isMissingBunRuntime, runAotBridge } from './aot-proxy.js';
 import pkg from '../package.json' with { type: 'json' };
 
-const VERSION = pkg.version || '0.6.5';
+const VERSION = pkg.version || '0.7.0';
 
 async function promptSelectClients(
   clients: typeof SUPPORTED_CLIENTS,
@@ -142,13 +145,14 @@ ${pc.bold('exoproc')} ${pc.dim(`v${VERSION}`)} - Native Windows x64 Reverse Engi
 One CLI and MCP server for thread hijacking, function detours, and memory inspection.
 
 Usage:
-  exoproc <command> [options]
+  exoproc [command] [options]
+  (default when run without command: starts the MCP server on stdio)
 
 Core Commands:
+  mcp                Run the Model Context Protocol (MCP) server [default]
+                     (standard stdio transport for AI agents and IDEs)
   setup              Configure AI agents with Exoproc MCP server & skills
                      (Claude Code, Cursor, Windsurf, Claude Desktop, Antigravity, Cline, Zed)
-  mcp                Run the Model Context Protocol (MCP) server
-                     (standard stdio transport for AI agents and IDEs)
   doctor, status     Inspect host environment and agent configurations
 
 Diagnostics & Tools:
@@ -181,11 +185,42 @@ process.stdout.on('error', (err: any) => {
   }
 });
 
-export async function cli(
-  args: string[] = process.argv.slice(2),
-): Promise<void> {
+async function runCli(args: string[] = process.argv.slice(2)): Promise<void> {
   const cmd = args[0];
   const isJson = args.includes('--json');
+
+  if (cmd === '__internal_download' || cmd === '__download') {
+    const url = args[1];
+    const destPath = args[2];
+    if (!url || !destPath) {
+      console.error('__internal_download missing args:', {
+        args,
+        argv: process.argv,
+      });
+      process.exit(1);
+    }
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error(
+          `__internal_download HTTP ${res.status}: ${res.statusText}`,
+        );
+        process.exit(1);
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      const { writeFileSync, mkdirSync, existsSync } = await import('node:fs');
+      const { dirname } = await import('node:path');
+      const dir = dirname(destPath);
+      if (dir && dir !== '.' && !existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      writeFileSync(destPath, buf);
+      process.exit(0);
+    } catch (err: any) {
+      console.error('__internal_download error:', err);
+      process.exit(1);
+    }
+  }
 
   if (cmd === '--help' || cmd === '-h' || cmd === 'help') {
     printHelp();
@@ -201,14 +236,14 @@ export async function cli(
     return;
   }
 
-  if (cmd === 'mcp' || cmd === '--mcp') {
+  if (!cmd || cmd === 'mcp' || cmd === '--mcp') {
     const { main: runMcp } = await import('exoproc-mcp');
     process.argv = [process.argv[0]!, process.argv[1]!, ...args.slice(1)];
     await runMcp();
     return;
   }
 
-  if (!cmd || cmd === 'setup') {
+  if (cmd === 'setup') {
     const isAll = args.includes('--all');
     const yes = args.includes('--yes') || args.includes('-y') || isAll;
     const dryRun = args.includes('--dry-run');
@@ -452,7 +487,33 @@ export async function cli(
   process.exit(1);
 }
 
-if (import.meta.main) {
+export async function cli(
+  args: string[] = process.argv.slice(2),
+): Promise<void> {
+  try {
+    await runCli(args);
+  } catch (err: any) {
+    if (isMissingBunRuntime(err)) {
+      await runAotBridge(args);
+      return;
+    }
+    throw err;
+  }
+}
+
+function isMainModule(): boolean {
+  if ((import.meta as any).main) return true;
+  if (!process.argv[1]) return false;
+  try {
+    return (
+      import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   cli().catch((err) => {
     console.error('Exoproc CLI error:', err);
     process.exit(1);

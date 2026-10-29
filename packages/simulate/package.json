@@ -1,6 +1,6 @@
 {
   "name": "win32-simulate",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "description": "Virtual Windows OS simulation engine and browser mock FFI layer for Exoproc.",
   "type": "module",
   "packageManager": "npm@12.0.1",

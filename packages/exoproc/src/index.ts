@@ -6,6 +6,7 @@ export * from './commands/screenshot.js';
 export * from './commands/compile.js';
 export * from './commands/exec.js';
 export * from './commands/run.js';
+export * from './aot-proxy.js';
 
 // Unified submodules bundled into exoproc
 export * as mcp from 'exoproc-mcp';
@@ -16,5 +17,6 @@ export * as nthread from 'bun-nthread';
 export * as capstone from 'bun-capstone';
 export * as simulate from 'win32-simulate';
 export * as java from 'bun-njava';
+export * as ipc from 'exoproc-ipc';
 export * as accessors from 'exoproc-accessors';
 export * as utils from 'exoproc-utils';

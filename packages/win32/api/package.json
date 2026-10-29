@@ -1,6 +1,6 @@
 {
   "name": "bun-winapi",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "description": "Ergonomic Win32 process and memory management API for Bun.",
   "main": "./dist/index.js",
   "exports": {

@@ -92,6 +92,7 @@ const TEST_DIR_TO_PACKAGE: Record<string, string> = {
   capstone: 'bun-capstone',
   exoproc: 'exoproc',
   'exoproc-mcp': 'exoproc-mcp',
+  ipc: 'exoproc-ipc',
   jjit: 'exoproc-jjit',
   minecraft: 'exoproc-minecraft',
   minhook: 'bun-minhook',

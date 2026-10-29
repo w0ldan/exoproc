@@ -8,16 +8,59 @@ import {
   type AgentBytecodeResult,
   type AgentBuildResult,
 } from './agent-builder.js';
+import {
+  findIpcServer,
+  getOrCreateIpcServer,
+  type IpcClientFilter,
+  type IpcServer,
+} from 'exoproc-ipc';
+
+export type AgentContextFactory = (options: {
+  server?: IpcServer;
+  pipePath?: string;
+  name?: string;
+  clientId?: string;
+  buildId?: string;
+  timeoutMs?: number;
+  sync?: boolean;
+  mapper?: any;
+  pool?: any;
+}) => any;
+
+let registeredAgentContextFactory: AgentContextFactory | null = null;
+
+/**
+ * Registers the JavaContext factory (`createAgentContext` from `bun-njava`)
+ * so `njava-agent` can construct agent contexts without dynamic circular imports.
+ */
+export function registerAgentContextFactory(
+  factory: AgentContextFactory,
+): void {
+  registeredAgentContextFactory = factory;
+}
+
+export function getRegisteredAgentContextFactory(): AgentContextFactory | null {
+  return registeredAgentContextFactory;
+}
 
 export interface AgentInjectionOptions {
   /**
-   * HTTP port for the agent to listen on.
-   * Defaults to 43378 (Exoproc.DEFAULT_PORT) or system property.
+   * Existing IPC server hub for the injected agent to connect back to.
    */
-  port?: number;
+  server?: IpcServer;
 
   /**
-   * Path to the compiled njava-agent.jar on disk.
+   * Custom Named Pipe name (e.g. "my_pipe" -> `\\.\pipe\my_pipe` on Windows).
+   */
+  name?: string;
+
+  /**
+   * Explicit Named Pipe / socket path override.
+   */
+  pipePath?: string;
+
+  /**
+   * Path to the compiled agent JAR on disk.
    * If omitted, dynamically compiled/retrieved via jjit & getAgentJar.
    */
   jarPath?: string;
@@ -39,7 +82,7 @@ export interface AgentInjectionOptions {
   parentClassLoader?: any;
 
   /**
-   * Max time in milliseconds to wait for the agent server to become ready.
+   * Max time in milliseconds to wait for the agent to connect to the IPC pipe.
    * Defaults to 10000ms.
    */
   timeoutMs?: number;
@@ -77,7 +120,9 @@ export interface AgentInjectionOptions {
 }
 
 export interface AgentInjectionResult {
-  port: number;
+  pipePath: string;
+  server: IpcServer;
+  clientId?: string;
   jarPath: string;
   urlLoader: any;
   agentClass: any;
@@ -86,7 +131,9 @@ export interface AgentInjectionResult {
 }
 
 export interface AgentMemoryInjectionOptions {
-  port?: number;
+  server?: IpcServer;
+  name?: string;
+  pipePath?: string;
   targetVersion?: number;
   javaPath?: string;
   classPath?: string;
@@ -103,7 +150,9 @@ export interface AgentMemoryInjectionOptions {
 }
 
 export interface AgentMemoryInjectionResult {
-  port: number;
+  pipePath: string;
+  server: IpcServer;
+  clientId?: string;
   className: string;
   agentClass: any;
   agentContext?: any;
@@ -133,7 +182,6 @@ export function extractClassNameFromClassBytes(
     if (offset >= bytes.length) break;
     const tag = bytes[offset++];
     if (tag === 1) {
-      // CONSTANT_Utf8
       const len = view.getUint16(offset);
       offset += 2;
       const str = Buffer.from(bytes.subarray(offset, offset + len)).toString(
@@ -142,7 +190,6 @@ export function extractClassNameFromClassBytes(
       offset += len;
       cp.set(i, { tag, str });
     } else if (tag === 7) {
-      // CONSTANT_Class
       const nameIndex = view.getUint16(offset);
       offset += 2;
       cp.set(i, { tag, nameIndex });
@@ -176,55 +223,71 @@ export function extractClassNameFromClassBytes(
   return nameEntry.str.replace(/\//g, '.');
 }
 
-/**
- * Checks whether an agent is currently running and responding on the specified port.
- */
-export async function isAgentRunning(
-  port = 43378,
-  timeoutMs = 1000,
-): Promise<boolean> {
-  try {
-    const signal =
-      typeof (AbortSignal as any)?.timeout === 'function'
-        ? (AbortSignal as any).timeout(timeoutMs)
-        : undefined;
-    const res = await fetch(`http://127.0.0.1:${port}/status`, { signal });
-    if (res.ok) {
-      const json = (await res.json()) as any;
-      return Boolean(json.alive !== false);
-    }
-  } catch {}
-  return false;
+function resolveInjectionServer(options: {
+  server?: IpcServer;
+  pipePath?: string;
+  name?: string;
+}): IpcServer {
+  if (options.server) return options.server;
+  return getOrCreateIpcServer({
+    pipePath: options.pipePath,
+    name: options.name,
+  });
 }
 
 /**
- * Waits until the agent HTTP server on the specified port responds with a 200 OK.
+ * Checks whether an agent is currently connected and responding on the specified IPC server/pipe.
+ */
+export async function isAgentRunning(
+  serverOrPipe?: IpcServer | string,
+  timeoutMs = 1000,
+): Promise<boolean> {
+  const srv =
+    serverOrPipe && typeof serverOrPipe === 'object'
+      ? serverOrPipe
+      : findIpcServer(serverOrPipe);
+  if (!srv) return false;
+  if (srv.getClients({ kind: 'java-agent' }).length === 0) return false;
+  return await srv.ping({ kind: 'java-agent', timeoutMs });
+}
+
+/**
+ * Waits until an injected Java agent connects to the IPC pipe server.
  */
 export async function waitForAgentReady(
-  port = 43378,
+  serverOrPipe?: IpcServer | string,
   timeoutMs = 10000,
+  filter?: IpcClientFilter,
 ): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (await isAgentRunning(port, 400)) {
-      return true;
-    }
-    await Bun.sleep(100);
+  const srv =
+    serverOrPipe && typeof serverOrPipe === 'object'
+      ? serverOrPipe
+      : getOrCreateIpcServer(
+          typeof serverOrPipe === 'string'
+            ? { pipePath: serverOrPipe }
+            : undefined,
+        );
+  try {
+    await srv.waitForClient({ kind: 'java-agent', ...filter }, timeoutMs);
+    return true;
+  } catch {
+    return false;
   }
-  return false;
 }
 
 /**
  * Injects the single consolidated Exoproc class directly into JVM memory
- * using ClassLoader.defineClass or JNI DefineClass.
+ * using ClassLoader.defineClass or JNI DefineClass and connects it back over Named Pipe IPC.
  *
- * ZERO disk files are written, ZERO jars are created.
+ * ZERO disk files are written, ZERO jars are created, ZERO open TCP ports.
  */
 export async function injectAgentInMemory(
   java: any,
   options: AgentMemoryInjectionOptions = {},
 ): Promise<AgentMemoryInjectionResult> {
-  const port = options.port ?? 43378;
+  const server = resolveInjectionServer(options);
+  await server.listen();
+  const pipePath = server.pipePath;
   const timeoutMs = options.timeoutMs ?? 10000;
   const verbose = options.verbose ?? false;
 
@@ -232,6 +295,7 @@ export async function injectAgentInMemory(
   let bytecode: Uint8Array;
   let className: string;
   let mappings = options.mappings;
+  let buildId: string | undefined;
 
   if (options.classPath) {
     if (!existsSync(options.classPath)) {
@@ -256,6 +320,7 @@ export async function injectAgentInMemory(
       extractClassNameFromClassBytes(bytecode) ||
       'org.exoproc.njava.agent.utils.Exoproc';
     mappings = options.buildResult.mappings ?? mappings;
+    buildId = options.buildResult.buildId;
   } else {
     if (verbose)
       console.log(
@@ -264,28 +329,29 @@ export async function injectAgentInMemory(
     const buildRes = await getAgentBytecode({
       javaVersion: options.targetVersion,
       javaPath: options.javaPath,
+      pipePath,
       obfuscate: options.obfuscate,
     });
     bytecode = buildRes.bytecode;
     className = options.className || buildRes.className;
     mappings = buildRes.mappings ?? mappings;
+    buildId = buildRes.buildId;
   }
 
-  // 2. Set port system property in the target JVM
+  // 2. Set pipe system property in the target JVM
   try {
     const System = java.type('java.lang.System');
-    System.setProperty('tc.njava.port', String(port));
+    await System.setProperty('exoproc.pipe', pipePath);
   } catch (err: any) {
     if (verbose)
       console.warn(
-        `[njava-agent] Warning setting tc.njava.port: ${err?.message}`,
+        `[njava-agent] Warning setting exoproc.pipe: ${err?.message}`,
       );
   }
 
   // 3. Define class into target JVM memory (zero disk I/O, zero JARs)
   let agentClass: any = null;
 
-  // Path A: JNI DefineClass via bridge
   const bridgeAny = java.bridge as any;
   if (
     typeof bridgeAny?.defineClass === 'function' ||
@@ -310,7 +376,6 @@ export async function injectAgentInMemory(
     }
   }
 
-  // Path B: Java reflection ClassLoader.defineClass using Base64 in-memory byte transfer
   if (!agentClass) {
     try {
       const ClassLoader = java.type('java.lang.ClassLoader');
@@ -319,12 +384,13 @@ export async function injectAgentInMemory(
       let targetLoader = options.parentClassLoader;
       if (!targetLoader) {
         try {
-          targetLoader = Thread.currentThread().getContextClassLoader();
+          const cur = await Thread.currentThread();
+          targetLoader = await cur.getContextClassLoader();
         } catch {}
       }
       if (!targetLoader) {
         try {
-          targetLoader = ClassLoader.getSystemClassLoader();
+          targetLoader = await ClassLoader.getSystemClassLoader();
         } catch {}
       }
 
@@ -333,28 +399,29 @@ export async function injectAgentInMemory(
 
       try {
         const Base64 = java.type('java.util.Base64');
-        bytesInJava = Base64.getDecoder().decode(b64);
+        const decoder = await Base64.getDecoder();
+        bytesInJava = await decoder.decode(b64);
       } catch {
         try {
           const DatatypeConverter = java.type(
             'javax.xml.bind.DatatypeConverter',
           );
-          bytesInJava = DatatypeConverter.parseBase64Binary(b64);
+          bytesInJava = await DatatypeConverter.parseBase64Binary(b64);
         } catch {}
       }
 
       if (bytesInJava) {
-        let currCl = targetLoader.getClass();
+        let currCl = await targetLoader.getClass();
         let defMethod: any = null;
         while (currCl && !defMethod) {
           try {
-            const methods = currCl.getDeclaredMethods();
+            const methods = await currCl.getDeclaredMethods();
             for (const m of methods) {
-              if (m.getName() === 'defineClass') {
-                const pts = m.getParameterTypes();
+              if ((await m.getName()) === 'defineClass') {
+                const pts = await m.getParameterTypes();
                 if (
                   pts.length === 4 &&
-                  pts[0].getName() === 'java.lang.String'
+                  (await pts[0].getName()) === 'java.lang.String'
                 ) {
                   defMethod = m;
                   break;
@@ -363,15 +430,15 @@ export async function injectAgentInMemory(
             }
           } catch {}
           try {
-            currCl = currCl.getSuperclass();
+            currCl = await currCl.getSuperclass();
           } catch {
             break;
           }
         }
 
         if (defMethod) {
-          defMethod.setAccessible(true);
-          agentClass = defMethod.invoke(
+          await defMethod.setAccessible(true);
+          agentClass = await defMethod.invoke(
             targetLoader,
             className,
             bytesInJava,
@@ -400,25 +467,25 @@ export async function injectAgentInMemory(
     );
   }
 
-  // 4. Invoke Exoproc.start(port)
+  // 4. Invoke Exoproc.start(pipePath)
   if (verbose)
-    console.log(`[njava-agent] Starting ${className} on port ${port}...`);
+    console.log(`[njava-agent] Starting ${className} -> pipe ${pipePath}...`);
   let invoked = false;
   try {
     if (typeof agentClass.start === 'function') {
-      agentClass.start(port);
+      await agentClass.start(pipePath);
       invoked = true;
     }
   } catch {}
 
   if (!invoked) {
     try {
-      const Integer = java.type('java.lang.Integer');
-      const startMethod = agentClass.getMethod(
+      const StringCls = java.type('java.lang.String');
+      const startMethod = await agentClass.getMethod(
         'start',
-        Integer.TYPE ?? Integer,
+        StringCls.class ?? StringCls,
       );
-      startMethod.invoke(null, port);
+      await startMethod.invoke(null, pipePath);
       invoked = true;
     } catch (err: any) {
       if (verbose)
@@ -426,24 +493,28 @@ export async function injectAgentInMemory(
     }
   }
 
-  // 5. Wait for agent ready
-  const ready = await waitForAgentReady(port, timeoutMs);
-  if (!ready) {
-    throw new Error(
-      `In-memory agent failed to respond on port ${port} within ${timeoutMs}ms`,
-    );
-  }
+  // 5. Wait for agent client handshake on the Named Pipe
+  const connectedClient = await server.waitForClient(
+    buildId ? { kind: 'java-agent', buildId } : { kind: 'java-agent' },
+    timeoutMs,
+  );
 
   if (verbose)
-    console.log(`[njava-agent] In-memory agent active on port ${port}!`);
+    console.log(
+      `[njava-agent] In-memory agent connected on ${pipePath} (clientId=${connectedClient.clientId})!`,
+    );
 
-  // 6. Connect agent context
+  // 6. Connect async agent context
   let agentContext: any = null;
   try {
-    const njavaPkg = 'bun-njava';
-    const mod: any = await import(njavaPkg);
-    if (typeof mod?.createAgentContext === 'function') {
-      agentContext = mod.createAgentContext({ port, sync: java.sync ?? true });
+    if (registeredAgentContextFactory) {
+      agentContext = registeredAgentContextFactory({
+        server,
+        pipePath,
+        clientId: connectedClient.clientId,
+        buildId: connectedClient.buildId,
+        sync: false,
+      });
     }
   } catch {}
 
@@ -455,7 +526,9 @@ export async function injectAgentInMemory(
   }
 
   return {
-    port,
+    pipePath,
+    server,
+    clientId: connectedClient.clientId,
     className,
     bytecode,
     agentClass,
@@ -465,13 +538,15 @@ export async function injectAgentInMemory(
 }
 
 /**
- * Synchronous twin of injectAgentInMemory.
+ * Synchronous twin of injectAgentInMemory (kicks off pipe listener and injects bytecode synchronously).
  */
 export function injectAgentInMemorySync(
   java: any,
   options: AgentMemoryInjectionOptions = {},
 ): AgentMemoryInjectionResult {
-  const port = options.port ?? 43378;
+  const server = resolveInjectionServer(options);
+  void server.listen();
+  const pipePath = server.pipePath;
 
   let bytecode: Uint8Array;
   let className: string;
@@ -504,6 +579,7 @@ export function injectAgentInMemorySync(
     const buildRes = getAgentBytecodeSync({
       javaVersion: options.targetVersion,
       javaPath: options.javaPath,
+      pipePath,
       obfuscate: options.obfuscate,
     });
     bytecode = buildRes.bytecode;
@@ -513,7 +589,7 @@ export function injectAgentInMemorySync(
 
   try {
     const System = java.type('java.lang.System');
-    System.setProperty('tc.njava.port', String(port));
+    System.setProperty('exoproc.pipe', pipePath);
   } catch {}
 
   let agentClass: any = null;
@@ -611,23 +687,22 @@ export function injectAgentInMemorySync(
   let invoked = false;
   try {
     if (typeof agentClass.start === 'function') {
-      agentClass.start(port);
+      agentClass.start(pipePath);
       invoked = true;
     }
   } catch {}
 
   if (!invoked) {
     try {
-      const Integer = java.type('java.lang.Integer');
+      const StringCls = java.type('java.lang.String');
       const startMethod = agentClass.getMethod(
         'start',
-        Integer.TYPE ?? Integer,
+        StringCls.class ?? StringCls,
       );
-      startMethod.invoke(null, port);
+      startMethod.invoke(null, pipePath);
     } catch {}
   }
 
-  // Merge build's exact mappings directly into runtime mapper / pool
   const targetMapper =
     options.mapper ?? options.pool ?? java?.mapper ?? java?.pool;
   if (targetMapper && mappings) {
@@ -635,7 +710,8 @@ export function injectAgentInMemorySync(
   }
 
   return {
-    port,
+    pipePath,
+    server,
     className,
     bytecode,
     agentClass,
@@ -655,7 +731,9 @@ export async function injectAgent(
   try {
     const memRes = await injectAgentInMemory(java, options);
     return {
-      port: memRes.port,
+      pipePath: memRes.pipePath,
+      server: memRes.server,
+      clientId: memRes.clientId,
       jarPath: ':memory:',
       urlLoader: null,
       agentClass: memRes.agentClass,
@@ -682,7 +760,8 @@ export function injectAgentSync(
   try {
     const memRes = injectAgentInMemorySync(java, options);
     return {
-      port: memRes.port,
+      pipePath: memRes.pipePath,
+      server: memRes.server,
       jarPath: ':memory:',
       urlLoader: null,
       agentClass: memRes.agentClass,
@@ -699,23 +778,27 @@ export function injectAgentSync(
 }
 
 /**
- * Dynamically injects and starts the NJava Agent inside a running JVM using URLClassLoader.
+ * Dynamically injects and starts the Exoproc Java Agent inside a running JVM using URLClassLoader.
  */
 export async function injectAgentViaClassLoader(
   java: any,
   options: AgentInjectionOptions = {},
 ): Promise<AgentInjectionResult> {
-  const port = options.port ?? 43378;
+  const server = resolveInjectionServer(options);
+  await server.listen();
+  const pipePath = server.pipePath;
   const timeoutMs = options.timeoutMs ?? 10000;
   const verbose = options.verbose ?? false;
 
   // 1. Resolve or compile agent jar
   let jarPath = options.jarPath;
   let mappings = options.mappings;
+  let buildId: string | undefined;
 
   if (options.buildResult && 'jarPath' in options.buildResult) {
     jarPath = options.buildResult.jarPath;
     mappings = options.buildResult.mappings ?? mappings;
+    buildId = options.buildResult.buildId;
   } else if (!jarPath || !existsSync(jarPath)) {
     if (verbose)
       console.log(
@@ -724,10 +807,12 @@ export async function injectAgentViaClassLoader(
     const buildRes = await getAgentJar({
       javaVersion: options.targetVersion,
       javaPath: options.javaPath,
+      pipePath,
       obfuscate: options.obfuscate,
     });
     jarPath = buildRes.jarPath;
     mappings = buildRes.mappings ?? mappings;
+    buildId = buildRes.buildId;
   } else if (jarPath && !mappings) {
     const tinyPath = jarPath.replace(/\.jar$/, '.tiny');
     if (existsSync(tinyPath)) {
@@ -739,14 +824,14 @@ export async function injectAgentViaClassLoader(
 
   if (verbose) console.log(`[njava-agent] Using agent JAR: ${jarPath}`);
 
-  // 2. Set port system property in the target JVM
+  // 2. Set pipe system property in the target JVM
   try {
     const System = java.type('java.lang.System');
-    System.setProperty('tc.njava.port', String(port));
+    await System.setProperty('exoproc.pipe', pipePath);
   } catch (err: any) {
     if (verbose)
       console.warn(
-        `[njava-agent] Warning setting tc.njava.port: ${err?.message}`,
+        `[njava-agent] Warning setting exoproc.pipe: ${err?.message}`,
       );
   }
 
@@ -756,80 +841,82 @@ export async function injectAgentViaClassLoader(
   const ClassLoader = java.type('java.lang.ClassLoader');
   const Thread = java.type('java.lang.Thread');
 
-  // Convert JAR path to Java File and URL
-  const jarFile = new File(jarPath);
-  const jarUrl = jarFile.toURI().toURL();
+  const jarFile = await new File(jarPath);
+  const jarUri = await jarFile.toURI();
+  const jarUrl = await jarUri.toURL();
   const urls =
     typeof java.to === 'function'
-      ? java.to([jarUrl], 'java.net.URL[]')
+      ? await java.to([jarUrl], 'java.net.URL[]')
       : [jarUrl];
 
-  // Resolve parent class loader
   let parentLoader = options.parentClassLoader;
   if (!parentLoader) {
     try {
-      const curThread = Thread.currentThread();
-      parentLoader = curThread.getContextClassLoader?.();
+      const curThread = await Thread.currentThread();
+      parentLoader = await curThread.getContextClassLoader?.();
     } catch {}
   }
   if (!parentLoader) {
     try {
-      parentLoader = ClassLoader.getSystemClassLoader();
+      parentLoader = await ClassLoader.getSystemClassLoader();
     } catch {}
   }
 
   if (verbose)
     console.log(`[njava-agent] Instantiating URLClassLoader for agent JAR...`);
 
-  // 4. Instantiate URLClassLoader
-  const urlLoader = new URLClassLoader(urls, parentLoader);
+  const urlLoader = await new URLClassLoader(urls, parentLoader);
 
-  // 5. Load agent class into JVM (try Exoproc first, then NJavaAgent)
   if (verbose) console.log(`[njava-agent] Loading agent class into JVM...`);
   let agentClass: any = null;
   try {
-    agentClass = urlLoader.loadClass('org.exoproc.njava.agent.utils.Exoproc');
+    agentClass = await urlLoader.loadClass(
+      'org.exoproc.njava.agent.utils.Exoproc',
+    );
   } catch {
-    agentClass = urlLoader.loadClass('org.exoproc.njava.agent.NJavaAgent');
+    agentClass = await urlLoader.loadClass(
+      'org.exoproc.njava.agent.NJavaAgent',
+    );
   }
 
-  // 6. Invoke start() on agent class
-  if (verbose) console.log(`[njava-agent] Invoking agent.start()...`);
+  // 6. Invoke start(pipePath, parentLoader) on agent class
+  if (verbose)
+    console.log(`[njava-agent] Invoking agent.start(${pipePath})...`);
   let invoked = false;
 
   try {
     const methods =
       typeof agentClass.getMethods === 'function'
-        ? agentClass.getMethods()
+        ? await agentClass.getMethods()
         : [];
     for (const m of methods) {
-      const name = typeof m.getName === 'function' ? m.getName() : m.name;
+      const name = typeof m.getName === 'function' ? await m.getName() : m.name;
       if (name === 'start') {
         const paramTypes =
           typeof m.getParameterTypes === 'function'
-            ? m.getParameterTypes()
+            ? await m.getParameterTypes()
             : [];
         if (paramTypes.length === 2) {
           const invArgs =
             typeof java.to === 'function'
-              ? java.to([port, parentLoader], 'java.lang.Object[]')
-              : [port, parentLoader];
-          m.invoke(null, invArgs);
+              ? await java.to([pipePath, parentLoader], 'java.lang.Object[]')
+              : [pipePath, parentLoader];
+          await m.invoke(null, invArgs);
           invoked = true;
           break;
         } else if (paramTypes.length === 1 && !invoked) {
           const invArgs =
             typeof java.to === 'function'
-              ? java.to([port], 'java.lang.Object[]')
-              : [port];
-          m.invoke(null, invArgs);
+              ? await java.to([pipePath], 'java.lang.Object[]')
+              : [pipePath];
+          await m.invoke(null, invArgs);
           invoked = true;
         } else if (paramTypes.length === 0 && !invoked) {
           const invArgs =
             typeof java.to === 'function'
-              ? java.to([], 'java.lang.Object[]')
+              ? await java.to([], 'java.lang.Object[]')
               : [];
-          m.invoke(null, invArgs);
+          await m.invoke(null, invArgs);
           invoked = true;
         }
       }
@@ -844,37 +931,37 @@ export async function injectAgentViaClassLoader(
   if (!invoked) {
     try {
       if (typeof agentClass.start === 'function') {
-        agentClass.start(port);
+        await agentClass.start(pipePath);
         invoked = true;
       }
     } catch {}
   }
 
-  // 7. Wait for HTTP server to become ready
   if (verbose)
     console.log(
-      `[njava-agent] Waiting for agent to respond on port ${port}...`,
+      `[njava-agent] Waiting for agent to connect on pipe ${pipePath}...`,
     );
-  const ready = await waitForAgentReady(port, timeoutMs);
-  if (!ready) {
-    throw new Error(
-      `Injected Java Agent failed to respond on port ${port} within ${timeoutMs}ms`,
-    );
-  }
+  const connectedClient = await server.waitForClient(
+    buildId ? { kind: 'java-agent', buildId } : { kind: 'java-agent' },
+    timeoutMs,
+  );
 
-  if (verbose) console.log(`[njava-agent] Agent active on port ${port}!`);
+  if (verbose)
+    console.log(`[njava-agent] Agent connected on pipe ${pipePath}!`);
 
-  // 8. Create Agent Context if bun-njava is available
   let agentContext: any = null;
   try {
-    const njavaPkg = 'bun-njava';
-    const mod: any = await import(njavaPkg);
-    if (typeof mod?.createAgentContext === 'function') {
-      agentContext = mod.createAgentContext({ port, sync: java.sync ?? true });
+    if (registeredAgentContextFactory) {
+      agentContext = registeredAgentContextFactory({
+        server,
+        pipePath,
+        clientId: connectedClient.clientId,
+        buildId: connectedClient.buildId,
+        sync: false,
+      });
     }
   } catch {}
 
-  // Merge build's exact mappings directly into runtime mapper / pool
   const targetMapper =
     options.mapper ?? options.pool ?? java?.mapper ?? java?.pool;
   if (targetMapper && mappings) {
@@ -882,7 +969,9 @@ export async function injectAgentViaClassLoader(
   }
 
   return {
-    port,
+    pipePath,
+    server,
+    clientId: connectedClient.clientId,
     jarPath,
     urlLoader,
     agentClass,
@@ -898,9 +987,10 @@ export function injectAgentViaClassLoaderSync(
   java: any,
   options: AgentInjectionOptions = {},
 ): AgentInjectionResult {
-  const port = options.port ?? 43378;
+  const server = resolveInjectionServer(options);
+  void server.listen();
+  const pipePath = server.pipePath;
 
-  // 1. Resolve or compile agent jar synchronously
   let jarPath = options.jarPath;
   let mappings = options.mappings;
 
@@ -911,6 +1001,7 @@ export function injectAgentViaClassLoaderSync(
     const buildRes = getAgentJarSync({
       javaVersion: options.targetVersion,
       javaPath: options.javaPath,
+      pipePath,
       obfuscate: options.obfuscate,
     });
     jarPath = buildRes.jarPath;
@@ -924,13 +1015,11 @@ export function injectAgentViaClassLoaderSync(
     }
   }
 
-  // 2. Set port system property in the target JVM
   try {
     const System = java.type('java.lang.System');
-    System.setProperty('tc.njava.port', String(port));
+    System.setProperty('exoproc.pipe', pipePath);
   } catch {}
 
-  // 3. Resolve Java reflection classes in target JVM
   const File = java.type('java.io.File');
   const URLClassLoader = java.type('java.net.URLClassLoader');
   const ClassLoader = java.type('java.lang.ClassLoader');
@@ -956,7 +1045,6 @@ export function injectAgentViaClassLoaderSync(
     } catch {}
   }
 
-  // 4. Instantiate URLClassLoader & load agent
   const urlLoader = new URLClassLoader(urls, parentLoader);
   let agentClass: any = null;
   try {
@@ -965,7 +1053,6 @@ export function injectAgentViaClassLoaderSync(
     agentClass = urlLoader.loadClass('org.exoproc.njava.agent.NJavaAgent');
   }
 
-  // 5. Invoke start()
   let invoked = false;
   try {
     const methods =
@@ -982,16 +1069,16 @@ export function injectAgentViaClassLoaderSync(
         if (paramTypes.length === 2) {
           const invArgs =
             typeof java.to === 'function'
-              ? java.to([port, parentLoader], 'java.lang.Object[]')
-              : [port, parentLoader];
+              ? java.to([pipePath, parentLoader], 'java.lang.Object[]')
+              : [pipePath, parentLoader];
           m.invoke(null, invArgs);
           invoked = true;
           break;
         } else if (paramTypes.length === 1 && !invoked) {
           const invArgs =
             typeof java.to === 'function'
-              ? java.to([port], 'java.lang.Object[]')
-              : [port];
+              ? java.to([pipePath], 'java.lang.Object[]')
+              : [pipePath];
           m.invoke(null, invArgs);
           invoked = true;
         } else if (paramTypes.length === 0 && !invoked) {
@@ -1009,12 +1096,11 @@ export function injectAgentViaClassLoaderSync(
   if (!invoked) {
     try {
       if (typeof agentClass.start === 'function') {
-        agentClass.start(port);
+        agentClass.start(pipePath);
       }
     } catch {}
   }
 
-  // Merge build's exact mappings directly into runtime mapper / pool
   const targetMapper =
     options.mapper ?? options.pool ?? java?.mapper ?? java?.pool;
   if (targetMapper && mappings) {
@@ -1022,7 +1108,8 @@ export function injectAgentViaClassLoaderSync(
   }
 
   return {
-    port,
+    pipePath,
+    server,
     jarPath,
     urlLoader,
     agentClass,

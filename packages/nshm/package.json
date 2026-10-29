@@ -1,6 +1,6 @@
 {
   "name": "bun-nshm",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "description": "Cross-process shared memory for Bun via a dummy-process handle relay — the caller never OpenProcess's the target directly.",
   "main": "./dist/index.js",
   "exports": {

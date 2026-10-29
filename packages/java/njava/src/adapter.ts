@@ -6,6 +6,7 @@
  */
 
 import { JavaClassBuilder } from 'exoproc-jjit';
+import { getAgentJarSync } from 'njava-agent';
 
 export type CallbackFunction = (...args: any[]) => any;
 
@@ -157,14 +158,15 @@ export function adaptBridgeArgument(
     context ?? bridge?.runtime ?? (bridge as any)?._runtime;
   if (effectiveContext && typeof effectiveContext.defineClass === 'function') {
     try {
-      const AdapterClass = effectiveContext.defineClass(castResult);
+      const AdapterClass = effectiveContext.defineClass(castResult, {
+        classPath: getAgentJarSync().jarPath,
+      });
       const javaInstance = new AdapterClass();
       if (typeof arg.setCast === 'function') {
         arg.setCast(normalizedTarget, javaInstance);
       }
       return javaInstance;
-    } catch (err) {
-      console.error('CAUGHT:', err);
+    } catch {
       // In unit test mocks or offline mode, fall back to castResult
     }
   }
@@ -237,9 +239,16 @@ export function buildExtendedClassAdapter(
     options?.className ??
     `Extended_${simpleName}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-  const parentReflected = bridge?.getClassSync
-    ? (bridge.getClassSync(obfParent) ?? bridge.getClassSync(parentClassName))
-    : undefined;
+  let parentReflected: any;
+  if (bridge?.findClassSync) {
+    parentReflected =
+      bridge.findClassSync(obfParent) ?? bridge.findClassSync(parentClassName);
+  } else if (bridge?.getClassSync) {
+    try {
+      parentReflected =
+        bridge.getClassSync(obfParent) ?? bridge.getClassSync(parentClassName);
+    } catch {}
+  }
 
   const isInterface = Boolean(
     parentReflected?.isInterface === true ||

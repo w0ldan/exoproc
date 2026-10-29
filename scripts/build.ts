@@ -165,16 +165,20 @@ async function buildAll() {
         '--sourcemap=none',
       ];
 
+      const isStandaloneFlag =
+        process.argv.includes('--bundle') ||
+        process.argv.includes('--standalone') ||
+        process.env.STANDALONE_BUNDLE === '1';
+
       const isSelfContained =
-        basename(pkgPath) === 'exoproc-mcp' || basename(pkgPath) === 'exoproc';
+        isStandaloneFlag &&
+        (basename(pkgPath) === 'exoproc-mcp' ||
+          basename(pkgPath) === 'exoproc');
 
       if (isSelfContained) {
-        // Self-contained bundle so it can be installed from npm and executed anywhere without workspace dependencies
+        // Self-contained bundle for dev testing / single-file execution
       } else {
-        buildArgs.push('--packages', 'external');
-        for (const ext of externals) {
-          buildArgs.push('--external', ext);
-        }
+        buildArgs.push('--external', '*');
       }
 
       const result = spawnSync(process.execPath, buildArgs, {
@@ -191,48 +195,6 @@ async function buildAll() {
     // promise true by copying the root LICENSE alongside its build output.
     if (Array.isArray(pkgJson.files) && pkgJson.files.includes('LICENSE')) {
       copyFileSync(join(ROOT_DIR, 'LICENSE'), join(pkgPath, 'LICENSE'));
-    }
-  }
-
-  // Ensure Capstone DLL is present in dist
-  const capstoneDll = join(
-    PACKAGES_DIR,
-    'capstone',
-    'core',
-    'deps',
-    'capstone.dll',
-  );
-  if (existsSync(capstoneDll)) {
-    copyFileSync(
-      capstoneDll,
-      join(PACKAGES_DIR, 'capstone', 'core', 'dist', 'capstone.dll'),
-    );
-  }
-
-  // Ensure ECJ Compiler and Remapper Jars are present in jjit and njava dist
-  const jjitDepsDir = join(PACKAGES_DIR, 'java', 'jjit', 'deps');
-  const njavaDepsDir = join(PACKAGES_DIR, 'java', 'njava', 'deps');
-  const activeJarSourceDir = existsSync(jjitDepsDir)
-    ? jjitDepsDir
-    : njavaDepsDir;
-
-  const jjitDistDir = join(PACKAGES_DIR, 'java', 'jjit', 'dist');
-  const njavaDistDir = join(PACKAGES_DIR, 'java', 'njava', 'dist');
-
-  if (existsSync(activeJarSourceDir)) {
-    mkdirSync(jjitDistDir, { recursive: true });
-    mkdirSync(njavaDistDir, { recursive: true });
-    mkdirSync(njavaDepsDir, { recursive: true });
-
-    for (const file of readdirSync(activeJarSourceDir)) {
-      if (file.endsWith('.jar')) {
-        const srcFile = join(activeJarSourceDir, file);
-        copyFileSync(srcFile, join(jjitDistDir, file));
-        copyFileSync(srcFile, join(njavaDistDir, file));
-        if (activeJarSourceDir !== njavaDepsDir) {
-          copyFileSync(srcFile, join(njavaDepsDir, file));
-        }
-      }
     }
   }
 

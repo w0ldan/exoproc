@@ -1,11 +1,9 @@
 import { load } from 'bun-xffi';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync, statSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
+import { existsSync } from 'fs';
 import { CapstoneDef } from 'bun-capstone-abi/def';
 import { getDepsCacheDir, resolveOrDownloadDepSync } from 'exoproc-utils';
-import { EMBEDDED_CAPSTONE_DLL_BASE64 } from './embedded-capstone.js';
 
 export { CapstoneDef };
 
@@ -22,7 +20,10 @@ function findCapstoneDll(): string {
   } catch {}
 
   // 2. Check local repository and distribution candidates
+  const execDir = process.execPath ? dirname(process.execPath) : '';
   const candidates = [
+    join(execDir, 'capstone.dll'),
+    join(execDir, 'deps/capstone.dll'),
     join(__dirname, 'capstone.dll'),
     join(__dirname, '../capstone.dll'),
     join(__dirname, '../deps/capstone.dll'),
@@ -54,25 +55,9 @@ function findCapstoneDll(): string {
     });
   } catch {}
 
-  // 4. Auto-extract embedded DLL into temp directory if available
-  if (
-    typeof EMBEDDED_CAPSTONE_DLL_BASE64 === 'string' &&
-    EMBEDDED_CAPSTONE_DLL_BASE64.length > 0
-  ) {
-    const tempDllPath = join(tmpdir(), 'exoproc_capstone.dll');
-    try {
-      const buf = Buffer.from(EMBEDDED_CAPSTONE_DLL_BASE64, 'base64');
-      if (
-        !existsSync(tempDllPath) ||
-        statSync(tempDllPath).size !== buf.length
-      ) {
-        writeFileSync(tempDllPath, buf);
-      }
-      return tempDllPath;
-    } catch {}
-  }
-
-  return join(__dirname, '../deps/capstone.dll');
+  throw new Error(
+    'Could not locate or download capstone.dll. Please check your internet connection or run `bun run deps`.',
+  );
 }
 
 export const CapstoneImpl = load({

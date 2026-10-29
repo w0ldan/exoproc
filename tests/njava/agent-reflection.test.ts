@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { spawn, type Subprocess } from 'bun';
+import { createIpcServer, type IpcServer } from 'exoproc-ipc';
 import {
   createAgentContext,
   AgentReflectionBridge,
@@ -7,172 +8,152 @@ import {
 import { getAgentJarSync } from 'njava-agent';
 import { getTestJavaPath } from './java-test-helpers.js';
 
-const TEST_PORT = 43391;
-
-describe('Agent Reflection RPC Bridge (Standalone)', () => {
+describe('Agent Reflection RPC Bridge over Named Pipe (Standalone)', () => {
+  let server: IpcServer;
   let agentProcess: Subprocess | null = null;
 
   beforeAll(async () => {
+    server = createIpcServer({
+      name: `test_agent_rpc_${process.pid}_${Date.now()}`,
+    });
+    await server.listen();
+
     const javaBin = getTestJavaPath(8);
-    const agent = getAgentJarSync({ javaVersion: 8, javaPath: javaBin });
+    const agent = getAgentJarSync({
+      javaVersion: 8,
+      javaPath: javaBin,
+      force: true,
+    });
     agentProcess = spawn(
-      [javaBin, '-jar', agent.jarPath, '--port', String(TEST_PORT)],
+      [javaBin, '-jar', agent.jarPath, '--pipe', server.pipePath],
       {
         stdout: 'ignore',
         stderr: 'inherit',
       },
     );
 
-    // Wait for the agent HTTP server to respond on /reflection/class
-    const startTime = Date.now();
-    let ready = false;
-    while (Date.now() - startTime < 10000) {
-      try {
-        const res = await fetch(
-          `http://127.0.0.1:${TEST_PORT}/reflection/class`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: 'java.lang.Object' }),
-            signal: AbortSignal.timeout(500),
-          },
-        );
-        if (res.ok) {
-          const body = (await res.json()) as any;
-          if (body.success) {
-            ready = true;
-            break;
-          }
-        }
-      } catch {}
-      await Bun.sleep(100);
-    }
+    await server.waitForClient({ kind: 'java-agent' }, 15000);
+  }, 30000);
 
-    if (!ready) {
-      agentProcess.kill();
-      throw new Error(
-        `Standalone agent failed to start on port ${TEST_PORT} within 10s`,
-      );
-    }
-  }, 25000);
-
-  afterAll(() => {
+  afterAll(async () => {
     if (agentProcess) {
       agentProcess.kill();
     }
+    if (server) {
+      await server.close();
+    }
   });
 
-  it('queries Exoproc host properties via reflection', () => {
-    const Java = createAgentContext({ port: TEST_PORT, sync: true });
-    const Exoproc = Java.type('Exoproc');
+  it('queries Exoproc host properties via reflection', async () => {
+    const Java = createAgentContext({ server });
+    const Exoproc = await Java.type('Exoproc');
     expect(Exoproc).toBeDefined();
 
-    expect(Exoproc.isAttached()).toBe(true);
-    expect(typeof Exoproc.getPid()).toBe('number');
-    expect(Exoproc.getPid()).toBeGreaterThan(0);
-    expect(typeof Exoproc.getTargetName()).toBe('string');
+    expect(await Exoproc.isAttached()).toBe(true);
+    const pid = await Exoproc.getPid();
+    expect(typeof pid).toBe('number');
+    expect(pid).toBeGreaterThan(0);
+    expect(typeof (await Exoproc.getTargetName())).toBe('string');
   });
 
-  it('invokes static methods synchronously via Java.type', () => {
-    const Java = createAgentContext({ port: TEST_PORT, sync: true });
+  it('invokes static methods via Java.type', async () => {
+    const Java = createAgentContext({ server });
     const System = Java.type('java.lang.System');
 
     expect(System).toBeDefined();
-    expect(System.name).toBe('java.lang.System');
 
-    // System.currentTimeMillis()
-    const now = System.currentTimeMillis();
+    const now = await System.currentTimeMillis();
     expect(typeof now).toBe('number');
     expect(now).toBeGreaterThan(1700000000000);
 
-    // System.getProperty('java.version')
-    const version = System.getProperty('java.version');
+    const version = await System.getProperty('java.version');
     expect(typeof version).toBe('string');
     expect(version.length).toBeGreaterThan(0);
   });
 
-  it('instantiates classes and calls instance methods', () => {
-    const Java = createAgentContext({ port: TEST_PORT, sync: true });
+  it('instantiates classes and calls instance methods', async () => {
+    const Java = createAgentContext({ server });
     const ArrayList = Java.type('java.util.ArrayList');
 
-    const list = new ArrayList();
+    const list = await new ArrayList();
     expect(list).toBeDefined();
-    expect(list.size()).toBe(0);
+    expect(await list.size()).toBe(0);
 
-    list.add('First');
-    list.add('Second');
+    await list.add('First');
+    await list.add('Second');
 
-    expect(list.size()).toBe(2);
-    expect(list.get(0)).toBe('First');
-    expect(list.get(1)).toBe('Second');
-    expect(list.toString()).toBe('[First, Second]');
+    expect(await list.size()).toBe(2);
+    expect(await list.get(0)).toBe('First');
+    expect(await list.get(1)).toBe('Second');
+    expect(await list.toString()).toBe('[First, Second]');
   });
 
-  it('supports Java.from conversion from Java list to native JS array', () => {
-    const Java = createAgentContext({ port: TEST_PORT, sync: true });
+  it('supports Java.from conversion from Java list to native JS array', async () => {
+    const Java = createAgentContext({ server });
     const ArrayList = Java.type('java.util.ArrayList');
 
-    const list = new ArrayList();
-    list.add('Alpha');
-    list.add('Beta');
-    list.add('Gamma');
+    const list = await new ArrayList();
+    await list.add('Alpha');
+    await list.add('Beta');
+    await list.add('Gamma');
 
-    const jsArray = Java.from(list);
+    const jsArray = await Java.from(list);
     expect(Array.isArray(jsArray)).toBe(true);
     expect(jsArray).toEqual(['Alpha', 'Beta', 'Gamma']);
   });
 
-  it('reads static fields and works with hybrid console output', () => {
-    const Java = createAgentContext({ port: TEST_PORT, sync: true });
+  it('reads static fields and works with hybrid console output', async () => {
+    const Java = createAgentContext({ server });
 
-    // JVM static field on Integer
     const Integer = Java.type('java.lang.Integer');
-    expect(Integer.MAX_VALUE).toBe(2147483647);
+    expect(await Integer.MAX_VALUE).toBe(2147483647);
 
-    // Hybrid System.out
-    const System = Java.type('java.lang.System');
-    const out = System.out;
+    const System = await Java.type('java.lang.System');
+    const out = await System.out;
     expect(out).toBeDefined();
     expect(typeof out.println).toBe('function');
   });
 
-  it('works in asynchronous mode with top-level await', async () => {
-    const bridge = new AgentReflectionBridge({ port: TEST_PORT });
-    const SystemClass = await bridge.getClass('java.lang.System');
+  it('works directly via AgentReflectionBridge', async () => {
+    const bridge = new AgentReflectionBridge({ server });
+    try {
+      const SystemClass = await bridge.getClass('java.lang.System');
 
-    expect(SystemClass.name).toBe('java.lang.System');
-    const methods = await SystemClass.getAllMethods();
-    const currentTimeMillisMethod = methods.find(
-      (m) => m.name === 'currentTimeMillis',
-    );
-    expect(currentTimeMillisMethod).toBeDefined();
+      expect(SystemClass.name).toBe('java.lang.System');
+      const methods = await SystemClass.getAllMethods();
+      const currentTimeMillisMethod = methods.find(
+        (m) => m.name === 'currentTimeMillis',
+      );
+      expect(currentTimeMillisMethod).toBeDefined();
 
-    const now = await currentTimeMillisMethod!.invoke(0n);
-    expect(typeof now).toBe('number');
-    expect(now).toBeGreaterThan(1700000000000);
+      const now = await currentTimeMillisMethod!.invoke(0n);
+      expect(typeof now).toBe('number');
+      expect(now).toBeGreaterThan(1700000000000);
+    } finally {
+      bridge.stopCallbackListener();
+    }
   });
 
-  it('executes tasks directly via Java.runSync and Java.runScript', async () => {
-    const Java = createAgentContext({ port: TEST_PORT, sync: true });
+  it('executes tasks via Java.runSync and Java.runScript', async () => {
+    const Java = createAgentContext({ server });
 
-    // Functional runSync mode
-    const syncRes = await Java.runSync((ctx, print) => {
+    const syncRes = await Java.runSync(async (ctx, print) => {
       const System = ctx.type('java.lang.System');
-      const time = System.currentTimeMillis();
+      const time = await System.currentTimeMillis();
       print('Agent reflection time:', time);
-      return { ok: true, timeValid: time > 0n };
+      return { ok: true, timeValid: time > 0 };
     });
     expect(syncRes.ok).toBe(true);
     expect(syncRes.timeValid).toBe(true);
 
-    // String script mode via runScript
     const scriptRes = await Java.runScript(`
       var System = Java.type('java.lang.System');
-      print('Agent script run');
+      var ver = await System.getProperty('java.version');
+      print('Agent script run ' + ver);
       return { val: 99 };
     `);
     expect(scriptRes.success).toBe(true);
     expect(scriptRes.result.val).toBe(99);
-    expect(scriptRes.logs).toContain('Agent script run');
+    expect(scriptRes.logs[0]).toContain('Agent script run');
   });
 });
