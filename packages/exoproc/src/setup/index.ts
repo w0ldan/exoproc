@@ -5,6 +5,9 @@ import { spawnSync } from 'node:child_process';
 import { SUPPORTED_CLIENTS } from './clients.js';
 import { updateClientConfig, isClientConfigured } from './config-writer.js';
 import { installSkills } from './skill-installer.js';
+import pkg from '../../package.json' with { type: 'json' };
+
+const VERSION = pkg.version || '0.7.0';
 import type {
   ClientConfigStatus,
   SetupContext,
@@ -84,12 +87,31 @@ export function createSetupContext(options?: {
     } else if (bunCmd) {
       command = [bunCmd, 'x', 'exoproc', 'mcp'];
     } else {
-      command = [
-        platform === 'win32' ? 'npx.cmd' : 'npx',
-        '-y',
-        'exoproc',
-        'mcp',
-      ];
+      let aotExePath: string | null = null;
+      if (platform === 'win32') {
+        const localAppData = env.LOCALAPPDATA || join(home, 'AppData', 'Local');
+        const defaultAot = join(
+          localAppData,
+          'exoproc',
+          'cache',
+          'deps',
+          `exoproc-v${VERSION}.exe`,
+        );
+        if (existsSync(defaultAot)) {
+          aotExePath = defaultAot;
+        }
+      }
+
+      if (aotExePath) {
+        command = [aotExePath, 'mcp'];
+      } else {
+        command = [
+          platform === 'win32' ? 'npx.cmd' : 'npx',
+          '-y',
+          'exoproc',
+          'mcp',
+        ];
+      }
     }
   }
 

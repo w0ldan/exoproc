@@ -1,6 +1,6 @@
 {
   "name": "bun-xffi",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Win32-optimized Cross-Process FFI foundation for Bun.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -61,7 +61,7 @@
     "@types/bun": "latest"
   },
   "dependencies": {
-    "exoproc-utils": "workspace:*",
-    "win32-abi": "workspace:*"
+    "exoproc-utils": "^0.7.1",
+    "win32-abi": "^0.7.1"
   }
 }

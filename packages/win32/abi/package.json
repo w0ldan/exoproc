@@ -1,6 +1,6 @@
 {
   "name": "win32-abi",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Runtime-neutral Win32 x64 DLL and function ABI manifests.",
   "type": "module",
   "main": "./dist/index.js",

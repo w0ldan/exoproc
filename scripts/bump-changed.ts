@@ -279,7 +279,9 @@ export async function main() {
   }
 
   // Apply updates to package.json files
+  const bumpedVersions = new Map<string, string>();
   for (const item of toBump) {
+    bumpedVersions.set(item.pkg.name, item.nextVersion);
     const content = readFileSync(item.pkg.packageJsonPath, 'utf-8');
     const json = JSON.parse(content);
     json.version = item.nextVersion;
@@ -288,6 +290,53 @@ export async function main() {
       JSON.stringify(json, null, 2) + '\n',
       'utf-8',
     );
+  }
+
+  // Update inter-package dependencies and replace workspace:* across all workspace packages
+  for (const pkg of packages.values()) {
+    if (!existsSync(pkg.packageJsonPath)) continue;
+    try {
+      const content = readFileSync(pkg.packageJsonPath, 'utf-8');
+      const json = JSON.parse(content);
+      let changed = false;
+
+      for (const section of [
+        'dependencies',
+        'devDependencies',
+        'peerDependencies',
+        'optionalDependencies',
+      ]) {
+        if (!json[section]) continue;
+        for (const [depName, currentDepVer] of Object.entries(json[section])) {
+          if (bumpedVersions.has(depName)) {
+            const next = bumpedVersions.get(depName)!;
+            json[section][depName] = `^${next}`;
+            changed = true;
+          } else if (
+            typeof currentDepVer === 'string' &&
+            currentDepVer.startsWith('workspace:')
+          ) {
+            const targetPkg = Array.from(packages.values()).find(
+              (p) => p.name === depName,
+            );
+            if (targetPkg) {
+              json[section][depName] = `^${targetPkg.version}`;
+              changed = true;
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        writeFileSync(
+          pkg.packageJsonPath,
+          JSON.stringify(json, null, 2) + '\n',
+          'utf-8',
+        );
+      }
+    } catch {
+      // ignore
+    }
   }
 
   // Synchronize server.json versions with root and exoproc package.json

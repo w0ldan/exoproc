@@ -1,6 +1,6 @@
 {
   "name": "bun-njava",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Cross-process JVM access (JavaVM/JNIEnv discovery) for Bun using thread redirection -- no DLL injection.",
   "main": "./dist/index.js",
   "exports": {
@@ -53,12 +53,12 @@
     "url": "https://github.com/w0ldan/exoproc/issues"
   },
   "dependencies": {
-    "bun-winapi": "workspace:*",
-    "bun-xffi": "workspace:*",
-    "exoproc-ipc": "workspace:*",
-    "exoproc-utils": "workspace:*",
-    "exoproc-jjit": "workspace:*",
-    "exoproc-mappings": "workspace:*",
-    "njava-agent": "workspace:*"
+    "bun-winapi": "^0.7.1",
+    "bun-xffi": "^0.7.1",
+    "exoproc-ipc": "^0.7.1",
+    "exoproc-utils": "^0.7.1",
+    "exoproc-jjit": "^0.7.1",
+    "exoproc-mappings": "^0.7.1",
+    "njava-agent": "^0.7.1"
   }
 }

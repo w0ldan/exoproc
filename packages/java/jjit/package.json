@@ -1,6 +1,6 @@
 {
   "name": "exoproc-jjit",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "On-the-fly typed Java source synthesis, AST builder, ECJ compiler, and remapper for the Exoproc ecosystem.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -58,8 +58,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "exoproc-mappings": "workspace:*",
-    "exoproc-utils": "workspace:*"
+    "exoproc-mappings": "^0.7.1",
+    "exoproc-utils": "^0.7.1"
   },
   "devDependencies": {
     "typescript": "^5.8.2"

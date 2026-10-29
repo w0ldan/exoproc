@@ -3,7 +3,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Zero-port Named Pipe and local socket IPC hub for Exoproc Java agents, TinyCC shellcode, and native process instrumentation.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -34,7 +34,7 @@
   ],
   "author": "Serkan",
   "dependencies": {
-    "exoproc-utils": "workspace:*"
+    "exoproc-utils": "^0.7.1"
   },
   "homepage": "https://github.com/w0ldan/exoproc#readme",
   "repository": {

@@ -4,7 +4,7 @@
     "access": "public"
   },
   "mcpName": "io.github.w0ldan/exoproc",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Unified CLI and Model Context Protocol (MCP) server for native Windows x64 reverse engineering, thread hijacking, function redirection, memory inspection, and runtime instrumentation.",
   "main": "./dist/index.js",
   "bin": {
@@ -58,17 +58,19 @@
   "dependencies": {
     "@clack/prompts": "^1.8.1",
     "picocolors": "^1.1.1",
-    "exoproc-mcp": "workspace:*",
-    "bun-winapi": "workspace:*",
-    "bun-xffi": "workspace:*",
-    "bun-nthread": "workspace:*",
-    "bun-minhook": "workspace:*",
-    "bun-capstone": "workspace:*",
-    "win32-simulate": "workspace:*",
-    "bun-njava": "workspace:*",
-    "exoproc-accessors": "workspace:*",
-    "exoproc-ipc": "workspace:*",
-    "exoproc-utils": "workspace:*"
+    "exoproc-utils": "^0.7.1"
+  },
+  "optionalDependencies": {
+    "exoproc-mcp": "^0.7.1",
+    "bun-winapi": "^0.7.1",
+    "bun-xffi": "^0.7.1",
+    "bun-nthread": "^0.7.1",
+    "bun-minhook": "^0.7.1",
+    "bun-capstone": "^0.7.1",
+    "win32-simulate": "^0.7.1",
+    "bun-njava": "^0.7.1",
+    "exoproc-accessors": "^0.7.1",
+    "exoproc-ipc": "^0.7.1"
   },
   "homepage": "https://github.com/w0ldan/exoproc#readme",
   "repository": {

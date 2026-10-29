@@ -82,6 +82,7 @@ export const SUPPORTED_CLIENTS: ClientDefinition[] = [
     format: 'json',
     getConfigPaths: (ctx: SetupContext) => [
       join(ctx.home, '.gemini', 'config', 'mcp_config.json'),
+      join(ctx.home, '.gemini', 'antigravity', 'mcp_config.json'),
     ],
     getSkillPaths: (ctx: SetupContext) => [
       join(ctx.home, '.gemini', 'config', 'skills', 'exoproc', 'SKILL.md'),

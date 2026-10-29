@@ -1,6 +1,6 @@
 {
   "name": "bun-winapi",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Ergonomic Win32 process and memory management API for Bun.",
   "main": "./dist/index.js",
   "exports": {
@@ -48,7 +48,7 @@
     "url": "https://github.com/w0ldan/exoproc/issues"
   },
   "dependencies": {
-    "bun-xffi": "workspace:*",
-    "exoproc-utils": "workspace:*"
+    "bun-xffi": "^0.7.1",
+    "exoproc-utils": "^0.7.1"
   }
 }
