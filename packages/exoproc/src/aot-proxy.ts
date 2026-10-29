@@ -1,9 +1,29 @@
 import { spawnSync } from 'node:child_process';
+import { basename } from 'node:path';
 import { resolveOrDownloadDep, type PackageDep } from 'exoproc-utils';
 import pkg from '../package.json' with { type: 'json' };
 
 const VERSION = pkg.version || '0.7.0';
 const GITHUB_REPO = 'w0ldan/exoproc';
+
+/**
+ * Detects whether the current process is running as a standalone Ahead-Of-Time (AOT)
+ * compiled binary (e.g. `exoproc.exe`) rather than via a runtime script runner (node, npx, bun, bunx).
+ */
+export function isAotBinary(): boolean {
+  if (typeof (globalThis as any).EXOPROC_AOT !== 'undefined') {
+    return Boolean((globalThis as any).EXOPROC_AOT);
+  }
+  const execBase = process.execPath
+    ? basename(process.execPath).toLowerCase()
+    : '';
+  return (
+    execBase.startsWith('exoproc') &&
+    !execBase.endsWith('.js') &&
+    !execBase.endsWith('.mjs') &&
+    !execBase.endsWith('.ts')
+  );
+}
 
 /**
  * Returns the PackageDep descriptor for the Windows x64 native AOT binary.

@@ -4,53 +4,182 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_aot:
+        description: 'Build and release Windows AOT executable'
+        required: false
+        type: boolean
+        default: true
+      release_npm:
+        description: 'Publish packages to npm'
+        required: false
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
 jobs:
-  release:
-    name: Build AOT & Release (Windows x64)
-    runs-on: windows-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      packages: write
-    env:
-      HUSKY: '0'
+  check:
+    name: Fast Version Check
+    runs-on: ubuntu-latest
+    outputs:
+      should_release_aot: ${{ steps.check.outputs.should_release_aot }}
+      should_release_npm: ${{ steps.check.outputs.should_release_npm }}
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Check version changes
+        id: check
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_AOT: ${{ github.event.inputs.release_aot }}
+          DISPATCH_NPM: ${{ github.event.inputs.release_npm }}
+        run: |
+          node - <<'EOF'
+          const fs = require('fs');
+          const { execSync } = require('child_process');
+
+          let beforeSha = process.env.BEFORE_SHA || '';
+          if (!beforeSha || beforeSha === '0000000000000000000000000000000000000000') {
+            try {
+              execSync('git cat-file -e HEAD~1 2>/dev/null');
+              beforeSha = 'HEAD~1';
+            } catch {
+              beforeSha = '';
+            }
+          }
+
+          const isDispatch = process.env.EVENT_NAME === 'workflow_dispatch';
+          const dispatchAot = process.env.DISPATCH_AOT !== 'false';
+          const dispatchNpm = process.env.DISPATCH_NPM !== 'false';
+
+          let exoprocVer = '';
+          try {
+            exoprocVer = JSON.parse(fs.readFileSync('packages/exoproc/package.json', 'utf8')).version || '';
+          } catch {}
+          if (!exoprocVer) {
+            try {
+              exoprocVer = JSON.parse(fs.readFileSync('package.json', 'utf8')).version || '';
+            } catch {}
+          }
+
+          let prevExoprocVer = '';
+          let anyPkgChanged = false;
+
+          if (beforeSha) {
+            try {
+              const prevContent = execSync(`git show ${beforeSha}:packages/exoproc/package.json 2>/dev/null`, { encoding: 'utf8' });
+              prevExoprocVer = JSON.parse(prevContent).version || '';
+            } catch {}
+            if (!prevExoprocVer) {
+              try {
+                const prevContent = execSync(`git show ${beforeSha}:package.json 2>/dev/null`, { encoding: 'utf8' });
+                prevExoprocVer = JSON.parse(prevContent).version || '';
+              } catch {}
+            }
+
+            try {
+              const diffFiles = execSync(`git diff --name-only ${beforeSha} HEAD`, { encoding: 'utf8' })
+                .split('\n')
+                .map(f => f.trim())
+                .filter(Boolean);
+              const changedPkgJsons = diffFiles.filter(f => f.endsWith('package.json'));
+              for (const f of changedPkgJsons) {
+                try {
+                  const cur = JSON.parse(fs.readFileSync(f, 'utf8')).version;
+                  const prev = JSON.parse(execSync(`git show ${beforeSha}:${f} 2>/dev/null`, { encoding: 'utf8' })).version;
+                  if (cur && prev && cur !== prev) {
+                    console.log(`Package version change detected in ${f}: ${prev} -> ${cur}`);
+                    anyPkgChanged = true;
+                    break;
+                  }
+                } catch {}
+              }
+            } catch {}
+          }
+
+          const aotChanged = Boolean(exoprocVer && prevExoprocVer && exoprocVer !== prevExoprocVer);
+          if (aotChanged) {
+            anyPkgChanged = true;
+          }
+
+          const shouldReleaseAot = isDispatch ? dispatchAot : aotChanged;
+          const shouldReleaseNpm = isDispatch ? dispatchNpm : anyPkgChanged;
+
+          console.log(`Current Exoproc version: ${exoprocVer}`);
+          console.log(`Previous Exoproc version: ${prevExoprocVer || 'none'}`);
+          console.log(`AOT version changed: ${aotChanged}`);
+          console.log(`Any package version changed: ${anyPkgChanged}`);
+          console.log(`should_release_aot: ${shouldReleaseAot}`);
+          console.log(`should_release_npm: ${shouldReleaseNpm}`);
+
+          const outputFile = process.env.GITHUB_OUTPUT;
+          if (outputFile) {
+            fs.appendFileSync(outputFile, `should_release_aot=${shouldReleaseAot}\n`);
+            fs.appendFileSync(outputFile, `should_release_npm=${shouldReleaseNpm}\n`);
+            fs.appendFileSync(outputFile, `version=${exoprocVer}\n`);
+            fs.appendFileSync(outputFile, `tag=v${exoprocVer}\n`);
+          }
+          EOF
+
+  release-npm:
+    name: Publish Packages to NPM (Linux)
+    needs: check
+    if: needs.check.outputs.should_release_npm == 'true'
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Configure npm registry auth for npmjs
+        shell: bash
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Build and publish packages to npm
+        run: bun run release
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  release-aot:
+    name: Build & Release Native AOT (Windows x64)
+    needs: check
+    if: needs.check.outputs.should_release_aot == 'true'
+    runs-on: windows-latest
+    env:
+      HUSKY: '0'
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Setup Bun (Canary)
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: canary
-
-      - name: Check Exoproc package version change
-        id: check-version
-        shell: bash
-        run: |
-          BEFORE_SHA="${{ github.event.before }}"
-          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BEFORE_SHA}:packages/exoproc/package.json" 2>/dev/null; then
-            BEFORE_SHA="HEAD~1"
-          fi
-
-          EXOPROC_VER=$(node -p "require('./packages/exoproc/package.json').version")
-          PREV_EXOPROC_VER=$(git show "${BEFORE_SHA}:packages/exoproc/package.json" 2>/dev/null | node -e "const fs=require('fs'); try { console.log(JSON.parse(fs.readFileSync(0,'utf8')).version || ''); } catch { console.log(''); }")
-
-          echo "Current Exoproc version: $EXOPROC_VER"
-          echo "Previous Exoproc version: $PREV_EXOPROC_VER"
-
-          if [ "$EXOPROC_VER" != "$PREV_EXOPROC_VER" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "version=$EXOPROC_VER" >> "$GITHUB_OUTPUT"
-            echo "tag=v$EXOPROC_VER" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_release=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Install dependencies
         run: bun install
@@ -59,16 +188,14 @@ jobs:
         run: bun run build
 
       - name: Compile Native Windows x64 AOT Executable
-        if: steps.check-version.outputs.should_release == 'true'
         run: |
           bun run scripts/compile.ts --outfile=release-assets/exoproc.exe
 
       - name: Create GitHub Release and Upload AOT Executable
-        if: steps.check-version.outputs.should_release == 'true'
         shell: bash
         run: |
-          TAG="${{ steps.check-version.outputs.tag }}"
-          VER="${{ steps.check-version.outputs.version }}"
+          TAG="${{ needs.check.outputs.tag }}"
+          VER="${{ needs.check.outputs.version }}"
 
           echo "Publishing release $TAG for Exoproc v$VER..."
           if ! gh release view "$TAG" >/dev/null 2>&1; then
@@ -83,18 +210,3 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure npm registry auth for npmjs
-        if: steps.check-version.outputs.should_release == 'true'
-        shell: bash
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish packages to npm
-        if: steps.check-version.outputs.should_release == 'true'
-        run: bun run release
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

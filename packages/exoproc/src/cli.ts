@@ -20,7 +20,7 @@ import {
   SUPPORTED_CLIENTS,
 } from './setup/index.js';
 import { runDoctor } from './doctor/index.js';
-import { isMissingBunRuntime, runAotBridge } from './aot-proxy.js';
+import { isAotBinary, isMissingBunRuntime, runAotBridge } from './aot-proxy.js';
 import pkg from '../package.json' with { type: 'json' };
 
 const VERSION = pkg.version || '0.7.0';
@@ -146,10 +146,10 @@ One CLI and MCP server for thread hijacking, function detours, and memory inspec
 
 Usage:
   exoproc [command] [options]
-  (default when run without command: starts the MCP server on stdio)
+  (default: starts MCP server when run as AOT binary, or launches setup via npx / bun x)
 
 Core Commands:
-  mcp                Run the Model Context Protocol (MCP) server [default]
+  mcp                Run the Model Context Protocol (MCP) server
                      (standard stdio transport for AI agents and IDEs)
   setup              Configure AI agents with Exoproc MCP server & skills
                      (Claude Code, Cursor, Windsurf, Claude Desktop, Antigravity, Cline, Zed)
@@ -186,7 +186,7 @@ process.stdout.on('error', (err: any) => {
 });
 
 async function runCli(args: string[] = process.argv.slice(2)): Promise<void> {
-  const cmd = args[0];
+  let cmd = args[0];
   const isJson = args.includes('--json');
 
   if (cmd === '__internal_download' || cmd === '__download') {
@@ -236,7 +236,31 @@ async function runCli(args: string[] = process.argv.slice(2)): Promise<void> {
     return;
   }
 
-  if (!cmd || cmd === 'mcp' || cmd === '--mcp') {
+  // When no command is specified (or setup flags like --yes are passed directly):
+  // - In AOT compiled binary (exoproc.exe): default directly to stdio MCP server for agent IDEs.
+  // - In npm / npx / bunx script runner: default to interactive setup wizard for developers!
+  const isSetupFlag =
+    Boolean(cmd) &&
+    (cmd === '--yes' ||
+      cmd === '-y' ||
+      cmd === '--all' ||
+      cmd === '--dry-run' ||
+      cmd === '--skill-only' ||
+      cmd === '--client' ||
+      cmd === '-c');
+
+  if (!cmd || isSetupFlag) {
+    if (isAotBinary() && !isSetupFlag) {
+      const { main: runMcp } = await import('exoproc-mcp');
+      process.argv = [process.argv[0]!, process.argv[1]!, ...args];
+      await runMcp();
+      return;
+    }
+
+    // Default to setup in script / npx / bunx mode
+    args = isSetupFlag ? ['setup', ...args] : ['setup'];
+    cmd = 'setup';
+  } else if (cmd === 'mcp' || cmd === '--mcp') {
     const { main: runMcp } = await import('exoproc-mcp');
     process.argv = [process.argv[0]!, process.argv[1]!, ...args.slice(1)];
     await runMcp();

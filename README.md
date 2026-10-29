@@ -14,11 +14,18 @@
 
 [Quick start](#quick-start) · [How Exoproc works](#how-exoproc-works) · [What you can inspect & instrument](#what-you-can-inspect--instrument) · [Showcases](#showcases) · [MCP tool catalog](#mcp-tool-catalog) · [CLI reference](#cli-reference) · [FAQ](#faq) · [Architecture](#architecture)
 
-```cmd
+</div>
+
+```bash
+# Node.js
+npx -y exoproc
+
+# Bun
+bun x exoproc
+
+# Windows (PowerShell)
 powershell -c "irm https://exoproc.woldan.me/install.ps1|iex"
 ```
-
-</div>
 
 > [!IMPORTANT]
 > Exoproc targets native **Windows x64** process runtime. Development and offline operations (C-to-shellcode JIT compilation, machine code simulation, and MCP schema generation) run cross-platform. Live instrumentation commands (`nthread`, `minhook`, memory manipulation, desktop inspection) run natively on Windows x64.
@@ -37,24 +44,46 @@ Analysis and instrumentation run locally with **zero DLL injection** and **no `C
 
 ### Installation & Agent Setup
 
-**Windows (Command Prompt / PowerShell - Recommended):**  
-Installs Bun if missing, sets up the global `exoproc` CLI runner, and launches the AI agent configuration wizard:
+Choose your preferred way to run or configure Exoproc:
+
+#### Option 1: Zero-Install via Node.js (`npx`)
+
+Works out-of-the-box on machines with Node.js (`>=18.0.0`). Transparently fetches the native Windows x64 AOT engine without requiring Bun:
+
+```bash
+# Interactive setup wizard
+npx -y exoproc
+
+# Auto-configure all detected AI agents
+npx -y exoproc setup --yes
+```
+
+#### Option 2: Zero-Install via Bun (`bun x`)
+
+Runs natively with Bun for high performance:
+
+```bash
+# Interactive setup wizard
+bun x exoproc
+
+# Auto-configure all detected AI agents
+bun x exoproc setup --yes
+```
+
+#### Option 3: Windows Automated Installer (PowerShell)
+
+Installs Bun if missing, sets up the global `exoproc` CLI command in your PATH, and runs the agent setup wizard:
 
 ```cmd
 powershell -c "irm https://exoproc.woldan.me/install.ps1|iex"
 ```
 
-**Zero Install (Directly with `bun x`):**  
-Runs the setup wizard directly in your terminal without manual installation:
+#### Option 4: Standalone Windows x64 Native Binary (`exoproc.exe`)
 
-```bash
-bun x exoproc
-```
+No Node.js and no Bun required! Download the pre-compiled Ahead-Of-Time (AOT) executable directly from [GitHub Releases](https://github.com/w0ldan/exoproc/releases/latest) and run:
 
-To auto-approve all detected agents non-interactively:
-
-```bash
-bun x exoproc setup --yes
+```cmd
+exoproc.exe setup --yes
 ```
 
 The wizard automatically discovers installed agents on your machine, writes portable stdio MCP configurations with automatic backups, and installs tailored agent instructions and skills. Restart your agent afterward.
@@ -96,9 +125,15 @@ exoproc screenshot screen.png
 exoproc doctor
 ```
 
-Once installed via `install.ps1`, the `exoproc` command is immediately available globally in your PATH (`~/.bun/bin`). Alternatively, run any command ad-hoc via `bun x`:
+Once installed globally, the `exoproc` command is immediately available in your PATH. Alternatively, run any command ad-hoc via `npx` or `bun x`:
 
 ```bash
+# Node.js
+npx exoproc ps
+npx exoproc windows
+npx exoproc doctor
+
+# Bun
 bun x exoproc ps
 bun x exoproc windows
 bun x exoproc doctor
@@ -108,14 +143,15 @@ bun x exoproc doctor
 
 To update Exoproc and refresh all agent configurations:
 
-```cmd
-powershell -c "irm https://exoproc.woldan.me/install.ps1|iex"
-```
-
-Or refresh configurations non-interactively via `bun x`:
-
 ```bash
-bun x exoproc setup --yes
+# Node.js
+npx -y exoproc@latest setup --yes
+
+# Bun
+bun x exoproc@latest setup --yes
+
+# PowerShell
+powershell -c "irm https://exoproc.woldan.me/install.ps1|iex"
 ```
 
 ---
@@ -334,7 +370,7 @@ Global Options:
 <details>
 <summary><strong>Which AI agents can use Exoproc?</strong></summary>
 
-Any AI coding agent that supports the standard Model Context Protocol (MCP) over stdio. Running `powershell -c "irm https://exoproc.woldan.me/install.ps1|iex"` or `bun x exoproc setup` automatically detects and configures Claude Code, Cursor, Windsurf, Claude Desktop, Antigravity, Cline, OpenCode, and Zed. Other clients can register `exoproc mcp` manually.
+Any AI coding agent that supports the standard Model Context Protocol (MCP) over stdio. Running `npx -y exoproc`, `bun x exoproc`, `exoproc.exe setup`, or the PowerShell installer automatically detects and configures Claude Code, Cursor, Windsurf, Claude Desktop, Antigravity, Cline, OpenCode, and Zed. Other clients can register `exoproc mcp` manually.
 
 </details>
 

@@ -14,16 +14,30 @@
 
 Exoproc connects your AI coding agents (**Claude Code, Cursor, Windsurf, Claude Desktop, Antigravity, Cline, OpenCode, Zed**) directly to live Windows x64 processes.
 
-Run the automatic setup wizard (Command Prompt or PowerShell):
+### 1. Via Node.js (`npx`)
+
+```bash
+npx -y exoproc setup --yes
+```
+
+### 2. Via Bun (`bun x`)
+
+```bash
+bun x exoproc setup --yes
+```
+
+### 3. Windows Automated Installer (PowerShell)
 
 ```cmd
 powershell -c "irm https://exoproc.woldan.me/install.ps1|iex"
 ```
 
-Or run directly with `bun x`:
+### 4. Standalone Windows x64 Binary (`exoproc.exe`)
 
-```bash
-bun x exoproc setup --yes
+Download `exoproc.exe` directly from [GitHub Releases](https://github.com/w0ldan/exoproc/releases/latest) with zero dependencies:
+
+```cmd
+exoproc.exe setup --yes
 ```
 
 The wizard automatically discovers installed agents on your machine, writes portable stdio MCP configurations with automatic backups, and installs tailored agent instructions and skills.

@@ -44,7 +44,12 @@ async function main() {
     mkdirSync(outParent, { recursive: true });
   }
 
-  const buildArgs: string[] = ['build', '--compile'];
+  const buildArgs: string[] = [
+    'build',
+    '--compile',
+    '--define',
+    'EXOPROC_AOT=true',
+  ];
 
   if (isWindowsHost && !target) {
     // Native AOT compilation on Windows (or inside Wine with Bun Canary)
