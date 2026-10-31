@@ -14,7 +14,6 @@
     { "path": "../nthread" },
     { "path": "../java/njava" },
     { "path": "../capstone/core" },
-    { "path": "../simulate" },
     { "path": "../accessors" },
     { "path": "../ipc" },
     { "path": "../utils" }

@@ -136,8 +136,7 @@ Inside `execute_code`, write real Win32 C code as if `<windows.h>` were already 
 - **`compile_c`**: Compile C source code into standalone relocatable x86_64 machine code / shellcode bytes using TinyCC JIT compiler, with automatic Win32 symbol resolution and optional Capstone disassembly (`code`, `returns?`, `args?`, `preamble?`, `disassemble?`, `baseAddress?`, `entry?`, `inject?`, `session?`).
 - **`compile_shellcode`**: Alias for `compile_c` with identical schema and functionality.
 
-### Offline Emulation, Disassembly & JVM
+### Disassembly & JVM
 
-- **`simulate_run`**: Emulate x86_64 machine code instructions offline without host OS effects (`bytesHex`, `maxSteps?`).
 - **`disassemble`**: Disassemble machine code bytes into x86_64 assembly instructions (`bytesHex`, `address?`).
 - **`jvm_inspect_jar`**: Inspect packages and classes inside a `.jar` archive (`jarPath`, `filter?`).

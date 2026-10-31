@@ -3,7 +3,7 @@ export * from './process.js';
 export * from './memory.js';
 export * from './minhook.js';
 export * from './nthread.js';
-export * from './simulate.js';
+export * from './compile.js';
 export * from './jvm.js';
 export * from './execution.js';
 export * from './desktop.js';

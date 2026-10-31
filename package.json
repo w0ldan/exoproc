@@ -8,8 +8,7 @@
     "packages/*",
     "packages/capstone/*",
     "packages/win32/*",
-    "packages/java/*",
-    "apps/*"
+    "packages/java/*"
   ],
   "keywords": [
     "exoproc",
@@ -41,7 +40,7 @@
     "build": "bun run scripts/build.ts",
     "build:clean": "bun run clean && bun run build",
     "build:standalone": "STANDALONE_BUNDLE=1 bun run scripts/build.ts",
-    "clean": "find . -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null; rm -rf dist-tests tests/dist release-assets; rm -f exoproc.js exoproc.tar.gz *.tgz *.exe packages/simulate/crt-*; find . -name '*.tsbuildinfo' -not -path '*/node_modules/*' -delete 2>/dev/null; true",
+    "clean": "find . -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null; rm -rf dist-tests tests/dist release-assets; rm -f exoproc.js exoproc.tar.gz *.tgz *.exe; find . -name '*.tsbuildinfo' -not -path '*/node_modules/*' -delete 2>/dev/null; true",
     "deps": "bun -e \"import { downloadAllWorkspaceDeps } from 'exoproc-utils'; await downloadAllWorkspaceDeps(process.cwd());\"",
     "mcp": "bun run packages/exoproc-mcp/dist/index.js",
     "compile": "bun run scripts/compile.ts",
@@ -54,9 +53,6 @@
     "format": "bun fmt",
     "format:check": "bun fmt --check",
     "test": "bun test tests/utils/ tests/exoproc/ tests/njava/compiler.test.ts tests/njava/remapper.test.ts",
-    "simulate:test": "bun --filter win32-simulate test:node",
-    "docs": "bun run --cwd apps/docs dev",
-    "docs:build": "bun run --cwd apps/docs build",
     "bump": "bun run scripts/bump-changed.ts",
     "bump:changed": "bun run scripts/bump-changed.ts",
     "release": "bun run build && changeset publish --no-git-tag",

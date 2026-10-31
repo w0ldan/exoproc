@@ -49,17 +49,6 @@
       ],
       "@exoproc/win32-abi": ["./packages/win32/abi/src/index.ts"],
       "win32-abi": ["./packages/win32/abi/src/index.ts"],
-      "@exoproc/simulate": ["./packages/simulate/src/index.ts"],
-      "simulate": ["./packages/simulate/src/index.ts"],
-      "win32-simulate": ["./packages/simulate/src/index.ts"],
-      "@exoproc/simulate/files": [
-        "./packages/simulate/src/platform/files/index.ts"
-      ],
-      "simulate/files": ["./packages/simulate/src/platform/files/index.ts"],
-      "win32-simulate/files": [
-        "./packages/simulate/src/platform/files/index.ts"
-      ],
-      "win32-simulate/bun-ffi": ["./packages/simulate/src/runtime/bun-ffi.ts"],
       "exoproc-minecraft": ["./packages/minecraft/src/index.ts"],
       "exoproc-mappings": ["./packages/java/mappings/src/index.ts"],
       "exoproc-nashorn": ["./packages/java/nashorn/src/index.ts"],
@@ -140,9 +129,6 @@
     },
     {
       "path": "./packages/minecraft"
-    },
-    {
-      "path": "./packages/simulate"
     },
     {
       "path": "./packages/exoproc-mcp"

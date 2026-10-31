@@ -67,7 +67,6 @@
     "bun-nthread": "^0.7.1",
     "bun-minhook": "^0.7.1",
     "bun-capstone": "^0.7.1",
-    "win32-simulate": "^0.7.1",
     "bun-njava": "^0.7.1",
     "exoproc-accessors": "^0.7.1",
     "exoproc-ipc": "^0.7.1"

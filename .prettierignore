@@ -13,8 +13,4 @@ package-lock.json
 
 # Generated files
 CHANGELOG.md
-apps/docs/.source/
-apps/docs/.next/
-apps/docs/.open-next/
-apps/docs/.wrangler/
-apps/docs/next-env.d.ts
+

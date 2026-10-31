@@ -73,12 +73,12 @@ exoproc run script.ts              # Execute standalone automation script
 
 ## MCP Tools (22 Tools)
 
-Exoproc exposes 22 high-performance tools over standard Model Context Protocol (stdio):
+Exoproc exposes 21 high-performance tools over standard Model Context Protocol (stdio):
 
 - **Process Discovery & Session:** `list_processes`, `spawn_process`, `open_accessor`, `close_accessor`
 - **Memory Manipulation:** `read_memory`, `write_memory`, `scan_pattern`, `allocate_memory`
 - **Function Detours & Thread Redirection:** `minhook_install`, `minhook_remove`, `list_hooks`, `nthread_call`
-- **C JIT Compilation & Machine Code:** `compile_c`, `compile_shellcode`, `disassemble`, `simulate_run`
+- **C JIT Compilation & Machine Code:** `compile_c`, `compile_shellcode`, `disassemble`
 - **Win32 Execution & Desktop Tools:** `execute_code`, `execute_local_code`, `execute_command`, `list_windows`, `take_screenshot`, `jvm_inspect_jar`
 
 ---

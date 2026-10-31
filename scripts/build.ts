@@ -277,6 +277,8 @@ function buildTests() {
         join(DIST_TESTS_DIR, 'setup.js'),
         '--target',
         'bun',
+        '--external',
+        '@aws-sdk/client-s3',
       ],
       { stdio: 'inherit' },
     );
@@ -291,7 +293,16 @@ function buildTests() {
 
     spawnSync(
       'bun',
-      ['build', testFile, '--outfile', outPath, '--target', 'bun'],
+      [
+        'build',
+        testFile,
+        '--outfile',
+        outPath,
+        '--target',
+        'bun',
+        '--external',
+        '@aws-sdk/client-s3',
+      ],
       { stdio: 'inherit' },
     );
   }

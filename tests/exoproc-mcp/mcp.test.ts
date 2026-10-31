@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   createMcpServer,
   listProcesses,
-  simulateRun,
   disassembleBytes,
   listHooks,
   executeLocalCode,
@@ -68,17 +67,6 @@ describe('exoproc-mcp', () => {
     assert.ok(Array.isArray(procs));
     assert.ok(procs.length > 0);
     assert.ok(typeof procs[0]?.pid === 'number');
-  });
-
-  it('simulates x86_64 machine code deterministically in memory', async () => {
-    // mov rax, 42 (48 b8 2a 00 00 00 00 00 00 00); add rax, 10 (48 83 c0 0a); ret (c3)
-    const res = await simulateRun({
-      bytesHex: '48b82a000000000000004883c00ac3',
-      maxSteps: 50,
-    });
-    assert.equal(res.success, true);
-    assert.equal(res.stepsExecuted, 3);
-    assert.equal(res.registers.rax, '0x34'); // 42 + 10 = 52 = 0x34
   });
 
   it('disassembles machine code via Capstone', async () => {

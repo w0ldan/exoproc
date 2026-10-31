@@ -15,7 +15,6 @@ export * as xffi from 'bun-xffi';
 export * as minhook from 'bun-minhook';
 export * as nthread from 'bun-nthread';
 export * as capstone from 'bun-capstone';
-export * as simulate from 'win32-simulate';
 export * as java from 'bun-njava';
 export * as ipc from 'exoproc-ipc';
 export * as accessors from 'exoproc-accessors';

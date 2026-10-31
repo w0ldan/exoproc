@@ -72,7 +72,6 @@ Inside \`execute_code\`, write real Win32 C code as if \`<windows.h>\` were alre
 - **\`nthread_call\`**: Call function via thread context redirection without CreateRemoteThread.
 - **\`compile_c\` / \`compile_shellcode\`**: Compile C code into standalone x86_64 machine code / shellcode.
 - **\`disassemble\`**: Disassemble machine code bytes into assembly instructions.
-- **\`simulate_run\`**: Offline virtual x86_64 CPU simulation.
 - **\`list_windows\`**: Enumerate visible desktop windows and child edit controls.
 - **\`take_screenshot\`**: Capture PNG screenshot of desktop or window.
 - **\`jvm_inspect_jar\`**: Inspect JAR archive classes and packages.

@@ -13,7 +13,6 @@ import {
   installMinHook,
   removeMinHook,
   nthreadCall,
-  simulateRun,
   disassembleBytes,
   compileC,
   inspectJar,
@@ -390,24 +389,7 @@ export function createMcpServer(): McpServer {
     async (args) => await executeLocalCode(args),
   );
 
-  // 6. Offline Simulation & Emulation
-  register(
-    'simulate_run',
-    'Simulate execution of x86_64 machine code bytes in a virtual x64 machine, returning final registers and steps executed without host OS effects.',
-    {
-      bytesHex: z
-        .string()
-        .describe(
-          'Hex string of machine code bytes (e.g. "48b82a000000000000004883c00ac3")',
-        ),
-      maxSteps: z
-        .number()
-        .optional()
-        .describe('Maximum instruction steps to simulate (default: 100)'),
-    },
-    async (args) => await simulateRun(args),
-  );
-
+  // 6. C Compilation & Disassembly
   register(
     'disassemble',
     'Disassemble x86_64 machine code bytes into instructions with mnemonics, operands, and offsets.',

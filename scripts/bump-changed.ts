@@ -102,7 +102,6 @@ const TEST_DIR_TO_PACKAGE: Record<string, string> = {
   'njava-runtime': 'exoproc-runtime',
   nshm: 'bun-nshm',
   nthread: 'bun-nthread',
-  simulate: 'win32-simulate',
   utils: 'exoproc-utils',
   winapi: 'bun-winapi',
   xffi: 'bun-xffi',

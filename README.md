@@ -7,7 +7,7 @@
 **Inspect a running process. Intercept functions, redirect threads, modify memory, and compile C to shellcode—without DLL injection.**
 
 [![npm version](https://img.shields.io/npm/v/exoproc?style=flat-square&color=cb3837)](https://www.npmjs.com/package/exoproc)
-[![MCP Catalog](https://img.shields.io/badge/MCP-22_tools-5c4ee5?style=flat-square)](server.json)
+[![MCP Catalog](https://img.shields.io/badge/MCP-21_tools-5c4ee5?style=flat-square)](server.json)
 [![Bun Requirements](https://img.shields.io/badge/Bun-%3E%3D1.0-339933?style=flat-square&logo=bun&logoColor=white)](https://bun.sh)
 [![License: MIT](https://img.shields.io/badge/license-MIT-f4c430?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/target-Windows_x64-0078d6?style=flat-square&logo=windows&logoColor=white)](#architecture)
@@ -34,7 +34,7 @@ powershell -c "irm https://exoproc.woldan.me/install.ps1|iex"
 
 See a feature in a native Windows application that you want to inspect or reverse engineer? Want your AI agent to debug a live process, read internal state, or intercept API calls in real time?
 
-**Exoproc connects your AI coding agent directly to Windows x64 process internals.** It equips agents (Claude Code, Cursor, Windsurf, Claude Desktop, Antigravity, VS Code Cline, OpenCode, Zed) with a 22-tool Model Context Protocol (MCP) server and a standalone terminal CLI.
+**Exoproc connects your AI coding agent directly to Windows x64 process internals.** It equips agents (Claude Code, Cursor, Windsurf, Claude Desktop, Antigravity, VS Code Cline, OpenCode, Zed) with a 21-tool Model Context Protocol (MCP) server and a standalone terminal CLI.
 
 Analysis and instrumentation run locally with **zero DLL injection** and **no `CreateRemoteThread`**.
 
@@ -291,32 +291,31 @@ await execute_code({
 
 ## MCP tool catalog
 
-Exoproc exposes **22 high-performance tools** over standard Model Context Protocol (stdio):
+Exoproc exposes **21 high-performance tools** over standard Model Context Protocol (stdio):
 
-| Category                 | Tool                 | Description                                                        |
-| :----------------------- | :------------------- | :----------------------------------------------------------------- |
-| **Process Discovery**    | `list_processes`     | Discover running processes with PIDs, names, and thread counts     |
-|                          | `spawn_process`      | Spawn a target process de-elevated with arguments                  |
-|                          | `execute_command`    | Execute shell commands and capture stdout/stderr                   |
-| **Session Lifecycle**    | `open_accessor`      | Attach to a target process via PID or image name                   |
-|                          | `close_accessor`     | Detach and clean up allocated remote buffers                       |
-| **Memory Manipulation**  | `read_memory`        | Read memory as hex, raw bytes, UTF-8/UTF-16 strings, or numbers    |
-|                          | `write_memory`       | Write raw bytes, strings, or numbers into target memory            |
-|                          | `scan_pattern`       | Search memory for byte patterns with wildcards (`48 8B ? ? 48 85`) |
-|                          | `allocate_memory`    | Allocate executable, read/write, or protected virtual memory       |
-| **Function Detours**     | `minhook_install`    | Install a 5-byte relative JMP detour with trampoline and far relay |
-|                          | `minhook_remove`     | Restore original bytes and clean up detour trampolines             |
-|                          | `list_hooks`         | Enumerate all active detours and trampolines                       |
-| **Thread Hijacking**     | `nthread_call`       | Invoke a remote function via live thread context redirection       |
-| **C JIT & Compilation**  | `compile_c`          | JIT-compile C code into standalone x86_64 shellcode via TinyCC     |
-|                          | `compile_shellcode`  | Alias for `compile_c` with automatic remote target injection       |
-|                          | `disassemble`        | Disassemble hex bytes into x86_64 assembly via Capstone            |
-| **Simulation & Testing** | `simulate_run`       | Deterministically simulate machine code execution in memory        |
-| **Win32 Execution**      | `execute_code`       | Execute C-style Win32 code inside the remote target process        |
-|                          | `execute_local_code` | Execute Win32 code in the local runner process                     |
-| **Desktop Inspection**   | `list_windows`       | Enumerate desktop windows, HWNDs, titles, and child edit controls  |
-|                          | `take_screenshot`    | Capture desktop or window rect directly to PNG                     |
-| **JVM Analysis**         | `jvm_inspect_jar`    | Inspect JAR contents, classes, methods, and bytecode signatures    |
+| Category                | Tool                 | Description                                                        |
+| :---------------------- | :------------------- | :----------------------------------------------------------------- |
+| **Process Discovery**   | `list_processes`     | Discover running processes with PIDs, names, and thread counts     |
+|                         | `spawn_process`      | Spawn a target process de-elevated with arguments                  |
+|                         | `execute_command`    | Execute shell commands and capture stdout/stderr                   |
+| **Session Lifecycle**   | `open_accessor`      | Attach to a target process via PID or image name                   |
+|                         | `close_accessor`     | Detach and clean up allocated remote buffers                       |
+| **Memory Manipulation** | `read_memory`        | Read memory as hex, raw bytes, UTF-8/UTF-16 strings, or numbers    |
+|                         | `write_memory`       | Write raw bytes, strings, or numbers into target memory            |
+|                         | `scan_pattern`       | Search memory for byte patterns with wildcards (`48 8B ? ? 48 85`) |
+|                         | `allocate_memory`    | Allocate executable, read/write, or protected virtual memory       |
+| **Function Detours**    | `minhook_install`    | Install a 5-byte relative JMP detour with trampoline and far relay |
+|                         | `minhook_remove`     | Restore original bytes and clean up detour trampolines             |
+|                         | `list_hooks`         | Enumerate all active detours and trampolines                       |
+| **Thread Hijacking**    | `nthread_call`       | Invoke a remote function via live thread context redirection       |
+| **C JIT & Compilation** | `compile_c`          | JIT-compile C code into standalone x86_64 shellcode via TinyCC     |
+|                         | `compile_shellcode`  | Alias for `compile_c` with automatic remote target injection       |
+|                         | `disassemble`        | Disassemble hex bytes into x86_64 assembly via Capstone            |
+| **Win32 Execution**     | `execute_code`       | Execute C-style Win32 code inside the remote target process        |
+|                         | `execute_local_code` | Execute Win32 code in the local runner process                     |
+| **Desktop Inspection**  | `list_windows`       | Enumerate desktop windows, HWNDs, titles, and child edit controls  |
+|                         | `take_screenshot`    | Capture desktop or window rect directly to PNG                     |
+| **JVM Analysis**        | `jvm_inspect_jar`    | Inspect JAR contents, classes, methods, and bytecode signatures    |
 
 ---
 
@@ -438,7 +437,7 @@ packages/
 ├── simulate/            # Deterministic in-memory x86_64 CPU and Win32 syscall emulator
 ├── runner/              # Ambient execution context for C-style Win32 scripts
 ├── utils/               # Shared logging, cache, on-demand dependency downloader & SHA verification
-├── exoproc-mcp/         # 22-tool Model Context Protocol server (pure stdio transport)
+├── exoproc-mcp/         # 21-tool Model Context Protocol server (pure stdio transport)
 └── exoproc/             # Unified CLI, setup wizard, doctor diagnostics, and distribution
 ```
 

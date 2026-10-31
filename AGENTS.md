@@ -10,7 +10,7 @@ It connects AI coding agents (Claude Code, Cursor, Windsurf, Claude Desktop, Ant
 
 **Current primary deliverables:**
 
-1. **MCP Server (`packages/exoproc-mcp`)**: A standard stdio Model Context Protocol (MCP) server exposing 22 tools for process discovery, memory manipulation, live Win32 code execution, minhook detours, nthread hijacking, TinyCC C-to-shellcode compilation, Capstone disassembly, and desktop window inspection.
+1. **MCP Server (`packages/exoproc-mcp`)**: A standard stdio Model Context Protocol (MCP) server exposing 21 tools for process discovery, memory manipulation, live Win32 code execution, minhook detours, nthread hijacking, TinyCC C-to-shellcode compilation, Capstone disassembly, and desktop window inspection.
 2. **Unified CLI & Setup (`packages/exoproc`)**: Self-contained CLI runner (`exoproc ps`, `windows`, `screenshot`, `compile`, `exec`, `run`, `doctor`) and automated agent configuration wizard (`exoproc setup`).
 3. **Core Systems Stack (`xffi`, `winapi`, `nthread`, `minhook`)**: Foundational memory accessors, thread redirection without `CreateRemoteThread`, and trampoline generation with far-detour relays.
 
@@ -76,8 +76,6 @@ bun-minhook           (function redirection: 5-byte JMP + trampoline/detour; nee
 bun-nshm              (Win32 shared memory transport & de-elevated process spawning)
   ^
 exoproc-accessors     (composite accessors: memcmp-read, memset-write, process-cache)
-  ^
-win32-simulate        (in-memory x86_64 CPU emulation and Win32 syscall simulation)
   ^
 exoproc-jjit          (Java 8/17+ in-memory compiler [ECJ] & bytecode obfuscation [Tiny-Remapper])
   ├── bun-njava       (JVM reverse engineering, JNI reflection, Java.type dynamic proxies)
@@ -188,7 +186,7 @@ JVM instrumentation and runtime reflection layer:
 
 The high-level CLI, setup engine, and Model Context Protocol (MCP) server:
 
-- **`exoproc-mcp`** — Dedicated stdio Model Context Protocol server exposing 22 high-performance tools (`list_processes`, `spawn_process`, `open_accessor`, `close_accessor`, `read_memory`, `write_memory`, `scan_pattern`, `allocate_memory`, `list_hooks`, `minhook_install`, `minhook_remove`, `nthread_call`, `execute_code`, `execute_local_code`, `execute_command`, `simulate_run`, `disassemble`, `compile_c`, `compile_shellcode`, `jvm_inspect_jar`, `list_windows`, `take_screenshot`). Pure stdio transport, zero ports, zero background daemon.
+- **`exoproc-mcp`** — Dedicated stdio Model Context Protocol server exposing 21 high-performance tools (`list_processes`, `spawn_process`, `open_accessor`, `close_accessor`, `read_memory`, `write_memory`, `scan_pattern`, `allocate_memory`, `list_hooks`, `minhook_install`, `minhook_remove`, `nthread_call`, `execute_code`, `execute_local_code`, `execute_command`, `disassemble`, `compile_c`, `compile_shellcode`, `jvm_inspect_jar`, `list_windows`, `take_screenshot`). Pure stdio transport, zero ports, zero background daemon.
 - **`exoproc`** — Unified binary and CLI (`packages/exoproc`). Provides:
   - `exoproc setup` — Multi-agent setup wizard detecting and configuring Claude Code, Cursor, Windsurf, Claude Desktop, Antigravity, Cline, OpenCode, and Zed.
   - `exoproc doctor` — Host environment, AI agent configuration, and binary dependencies SHA checksum diagnostics.
