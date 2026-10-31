@@ -86,7 +86,7 @@ exoproc-jjit          (Java 8/17+ in-memory compiler [ECJ] & bytecode obfuscatio
   ^
 exoproc-runner        (ambient execution context for C-style Win32 automation scripts)
   ^
-exoproc-mcp           (22-tool Model Context Protocol server over stdio)
+exoproc-mcp           (21-tool Model Context Protocol server over stdio)
   ^
 exoproc               (Unified CLI: `exoproc setup`, `doctor`, `mcp`, `ps`, `windows`, `screenshot`, `compile`, `exec`)
 ```

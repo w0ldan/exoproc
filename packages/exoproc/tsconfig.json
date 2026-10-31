@@ -16,6 +16,8 @@
     { "path": "../java/njava" },
     { "path": "../accessors" },
     { "path": "../ipc" },
+    { "path": "../runner" },
+    { "path": "../asm" },
     { "path": "../utils" }
   ]
 }

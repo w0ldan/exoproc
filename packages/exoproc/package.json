@@ -58,9 +58,7 @@
   "dependencies": {
     "@clack/prompts": "^1.8.1",
     "picocolors": "^1.1.1",
-    "exoproc-utils": "^0.7.1"
-  },
-  "optionalDependencies": {
+    "exoproc-utils": "^0.7.1",
     "exoproc-mcp": "^0.7.1",
     "bun-winapi": "^0.7.1",
     "bun-xffi": "^0.7.1",
@@ -69,7 +67,9 @@
     "bun-capstone": "^0.7.1",
     "bun-njava": "^0.7.1",
     "exoproc-accessors": "^0.7.1",
-    "exoproc-ipc": "^0.7.1"
+    "exoproc-ipc": "^0.7.1",
+    "exoproc-runner": "^0.7.1",
+    "exoproc-asm": "^0.7.1"
   },
   "homepage": "https://github.com/w0ldan/exoproc#readme",
   "repository": {

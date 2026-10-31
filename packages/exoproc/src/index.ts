@@ -17,5 +17,7 @@ export * as nthread from 'bun-nthread';
 export * as capstone from 'bun-capstone';
 export * as java from 'bun-njava';
 export * as ipc from 'exoproc-ipc';
+export * as runner from 'exoproc-runner';
+export * as asm from 'exoproc-asm';
 export * as accessors from 'exoproc-accessors';
 export * as utils from 'exoproc-utils';
